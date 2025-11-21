@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 import google.generativeai as genai
 import os
+from toon_parser import parse_destinations_toon
 
 app = FastAPI(title="ViajeIA API")
 
@@ -180,23 +181,28 @@ async def get_popular_destinations():
                 detail="API key de Gemini no configurada. Por favor, configura la variable de entorno GEMINI_API_KEY. Ver SECRETS.md para instrucciones."
             )
         
-        # Crear el prompt para Gemini para obtener destinos populares
+        # Crear el prompt para Gemini para obtener destinos populares usando TOON
         prompt = """Eres un experto en viajes y turismo. 
 
-Tu tarea es proporcionar una lista de exactamente 5 destinos turísticos populares y recomendados en formato JSON.
+Tu tarea es proporcionar una lista de exactamente 5 destinos turísticos populares y recomendados en formato TOON.
 
-IMPORTANTE:
-- Devuelve SOLO un array JSON con exactamente 5 destinos
+IMPORTANTE - FORMATO TOON REQUERIDO:
+- Usa formato TOON (Token-Oriented Object Notation), NO uses JSON
+- Formato TOON: una línea por destino, sin comillas, corchetes ni comas
 - Cada destino debe incluir el nombre de la ciudad y el país (ejemplo: "París, Francia")
 - Los destinos deben ser diversos geográficamente (diferentes continentes)
 - Incluye destinos populares y reconocidos mundialmente
-- El formato debe ser: ["Destino 1", "Destino 2", "Destino 3", "Destino 4", "Destino 5"]
-- NO incluyas explicaciones, solo el array JSON
+- NO incluyas explicaciones, numeración, ni texto adicional
+- Responde SOLO con los 5 destinos, uno por línea
 
-Ejemplo de formato esperado:
-["París, Francia", "Tokio, Japón", "Nueva York, Estados Unidos", "Bali, Indonesia", "Barcelona, España"]
+Ejemplo de formato TOON esperado:
+París, Francia
+Tokio, Japón
+Nueva York, Estados Unidos
+Bali, Indonesia
+Barcelona, España
 
-Responde SOLO con el array JSON, sin texto adicional."""
+Responde SOLO con los 5 destinos en formato TOON, sin texto adicional."""
 
         # Inicializar el modelo de Gemini
         GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -244,37 +250,15 @@ Responde SOLO con el array JSON, sin texto adicional."""
                 detail="La respuesta de Gemini está vacía o en formato inesperado"
             )
         
-        # Limpiar la respuesta para extraer solo el JSON
-        response_text = response_text.strip()
+        # Parsear respuesta TOON usando el parser especializado
+        destinations = parse_destinations_toon(response_text)
         
-        # Intentar extraer el JSON de la respuesta
-        import json
-        import re
+        # Validar y limitar a 5 destinos
+        if destinations and len(destinations) > 0:
+            destinations = destinations[:5]
+            return DestinationsResponse(destinations=destinations)
         
-        # Buscar un array JSON en la respuesta
-        json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            try:
-                destinations = json.loads(json_str)
-                # Validar que sea una lista y tenga máximo 5 elementos
-                if isinstance(destinations, list) and len(destinations) > 0:
-                    # Limitar a 5 destinos
-                    destinations = destinations[:5]
-                    return DestinationsResponse(destinations=destinations)
-            except json.JSONDecodeError:
-                pass
-        
-        # Si no se pudo parsear, intentar parsear toda la respuesta como JSON
-        try:
-            destinations = json.loads(response_text)
-            if isinstance(destinations, list) and len(destinations) > 0:
-                destinations = destinations[:5]
-                return DestinationsResponse(destinations=destinations)
-        except json.JSONDecodeError:
-            pass
-        
-        # Si falla todo, devolver destinos por defecto
+        # Si falla el parseo TOON, devolver destinos por defecto
         default_destinations = [
             "París, Francia",
             "Tokio, Japón",
@@ -323,28 +307,29 @@ async def search_destinations(search_query: DestinationSearchQuery):
         
         query = search_query.query.strip()
         
-        # Crear el prompt para Gemini para buscar destinos
+        # Crear el prompt para Gemini para buscar destinos usando TOON
         prompt = f"""Eres un experto en viajes y turismo. 
 
 El usuario está escribiendo: "{query}"
 
 Tu tarea es sugerir destinos turísticos que coincidan con lo que el usuario está escribiendo.
 
-IMPORTANTE:
-- Devuelve SOLO un array JSON con máximo 5 destinos que coincidan con "{query}"
+IMPORTANTE - FORMATO TOON REQUERIDO:
+- Usa formato TOON (Token-Oriented Object Notation), NO uses JSON
+- Formato TOON: una línea por destino, sin comillas, corchetes ni comas
+- Devuelve máximo 5 destinos que coincidan con "{query}"
 - Cada destino debe incluir el nombre de la ciudad y el país (ejemplo: "Aruba, Aruba" o "Auckland, Nueva Zelanda")
 - Si "{query}" es parte de un nombre de ciudad o país, sugiere destinos que contengan ese texto
 - Los destinos deben ser reales y reconocidos
-- El formato debe ser: ["Destino 1", "Destino 2", "Destino 3", ...]
-- NO incluyas explicaciones, solo el array JSON
-- Si no encuentras destinos relevantes, devuelve un array vacío []
+- NO incluyas explicaciones, numeración, ni texto adicional
+- Si no encuentras destinos relevantes, no devuelvas nada (respuesta vacía)
 
-Ejemplos:
-- Si el usuario escribe "aru", sugiere: ["Aruba, Aruba"]
-- Si el usuario escribe "barc", sugiere: ["Barcelona, España"]
-- Si el usuario escribe "tok", sugiere: ["Tokio, Japón"]
+Ejemplos de formato TOON:
+- Si el usuario escribe "aru", responde: Aruba, Aruba
+- Si el usuario escribe "barc", responde: Barcelona, España
+- Si el usuario escribe "tok", responde: Tokio, Japón
 
-Responde SOLO con el array JSON, sin texto adicional."""
+Responde SOLO con los destinos en formato TOON, uno por línea, sin texto adicional."""
 
         # Inicializar el modelo de Gemini
         GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -386,37 +371,15 @@ Responde SOLO con el array JSON, sin texto adicional."""
         if not response_text:
             return DestinationsResponse(destinations=[])
         
-        # Limpiar la respuesta para extraer solo el JSON
-        response_text = response_text.strip()
+        # Parsear respuesta TOON usando el parser especializado
+        destinations = parse_destinations_toon(response_text)
         
-        # Intentar extraer el JSON de la respuesta
-        import json
-        import re
+        # Validar y limitar a 5 destinos
+        if destinations and len(destinations) > 0:
+            destinations = destinations[:5]
+            return DestinationsResponse(destinations=destinations)
         
-        # Buscar un array JSON en la respuesta
-        json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            try:
-                destinations = json.loads(json_str)
-                # Validar que sea una lista
-                if isinstance(destinations, list):
-                    # Limitar a 5 destinos
-                    destinations = destinations[:5]
-                    return DestinationsResponse(destinations=destinations)
-            except json.JSONDecodeError:
-                pass
-        
-        # Si no se pudo parsear, intentar parsear toda la respuesta como JSON
-        try:
-            destinations = json.loads(response_text)
-            if isinstance(destinations, list):
-                destinations = destinations[:5]
-                return DestinationsResponse(destinations=destinations)
-        except json.JSONDecodeError:
-            pass
-        
-        # Si falla todo, devolver lista vacía
+        # Si falla el parseo, devolver lista vacía
         return DestinationsResponse(destinations=[])
         
     except HTTPException:
