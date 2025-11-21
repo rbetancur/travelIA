@@ -27,7 +27,17 @@ function App() {
       setResponse(result.data.answer);
     } catch (error) {
       console.error('Error:', error);
-      setResponse('Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.');
+      let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
+      
+      if (error.response) {
+        // El servidor respondió con un código de error
+        errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        // La solicitud se hizo pero no se recibió respuesta
+        errorMessage = 'No se pudo conectar con el servidor. Por favor, verifica que el backend esté corriendo.';
+      }
+      
+      setResponse(`❌ Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -38,7 +48,7 @@ function App() {
       <div className="container">
         <header className="header">
           <h1 className="title">ViajeIA</h1>
-          <p className="subtitle">Tu Asistente Personal de Viajes</p>
+          <p className="subtitle">Alex, tu Consultor Personal de Viajes 🧳✈️</p>
         </header>
 
         <main className="main-content">
@@ -66,10 +76,10 @@ function App() {
           {response && (
             <div className="response-container">
               <div className="response-header">
-                <h2>Tu Plan de Viaje</h2>
+                <h2>Respuesta de Alex 🧳</h2>
               </div>
               <div className="response-content">
-                <p>{response}</p>
+                <div className="response-text">{response}</div>
               </div>
             </div>
           )}

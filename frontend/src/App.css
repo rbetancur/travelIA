@@ -156,6 +156,24 @@
   word-wrap: break-word;
 }
 
+.response-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.response-text ul,
+.response-text ol {
+  margin: 15px 0;
+  padding-left: 25px;
+}
+
+.response-text li {
+  margin: 8px 0;
+}
+
 @media (max-width: 768px) {
   .container {
     border-radius: 0;

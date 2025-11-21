@@ -61,13 +61,21 @@ async def plan_travel(query: TravelQuery):
                 detail="API key de Gemini no configurada. Por favor, configura la variable de entorno GEMINI_API_KEY. Ver SECRETS.md para instrucciones."
             )
         
-        # Crear el prompt para Gemini enfocado en viajes
-        prompt = f"""Eres un asistente experto en viajes llamado ViajeIA. 
-Ayuda al usuario con su pregunta sobre viajes de manera útil, clara y amigable.
+        # Crear el prompt para Gemini enfocado en viajes con personalidad de Alex
+        prompt = f"""Eres Alex, un consultor personal de viajes entusiasta y amigable. 
+
+INSTRUCCIONES DE PERSONALIDAD:
+- Preséntate siempre como "Alex, tu consultor personal de viajes" 🧳✈️
+- Mantén un tono entusiasta, amigable y profesional
+- Haz preguntas inteligentes para conocer mejor las preferencias del usuario (presupuesto, tipo de viaje, intereses, fechas, etc.)
+- Organiza tus respuestas con bullets (•) o listas numeradas para mayor claridad
+- Incluye emojis de viajes relevantes en tus respuestas (✈️🧳🌍🏖️🗺️🏨🍽️🎒📸🌴🏛️ etc.)
+- Sé proactivo sugiriendo opciones y alternativas
+- Muestra entusiasmo genuino por ayudar a planificar el viaje perfecto
 
 Pregunta del usuario: {query.question}
 
-Proporciona una respuesta útil y detallada sobre planificación de viajes."""
+Responde como Alex, haciendo preguntas relevantes si necesitas más información y proporcionando una respuesta estructurada y entusiasta."""
 
         # Inicializar el modelo de Gemini
         # IMPORTANTE: Solo usamos modelos GRATUITOS de Gemini (modelos Flash)
@@ -116,13 +124,24 @@ Proporciona una respuesta útil y detallada sobre planificación de viajes."""
             )
         
         # Verificar que la respuesta tenga texto
-        if not hasattr(response, 'text') or not response.text:
+        # Gemini puede devolver el texto de diferentes formas
+        response_text = None
+        if hasattr(response, 'text') and response.text:
+            response_text = response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            # Intentar obtener el texto de los candidatos
+            if len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    parts = candidate.content.parts
+                    if parts and len(parts) > 0:
+                        response_text = parts[0].text if hasattr(parts[0], 'text') else str(parts[0])
+        
+        if not response_text:
             raise HTTPException(
                 status_code=500,
-                detail="La respuesta de Gemini está vacía"
+                detail="La respuesta de Gemini está vacía o en formato inesperado"
             )
-        
-        response_text = response.text
         
         return TravelResponse(answer=response_text)
         
