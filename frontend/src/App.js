@@ -1,5 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { 
+  Luggage, 
+  Plane, 
+  MapPin, 
+  Calendar, 
+  Unlock, 
+  Users, 
+  User, 
+  Baby, 
+  Mountain, 
+  Umbrella, 
+  Landmark, 
+  X, 
+  AlertCircle, 
+  ArrowRight, 
+  ArrowLeft, 
+  ChevronRight, 
+  ChevronLeft, 
+  Minus, 
+  Plus 
+} from 'lucide-react';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -35,6 +56,8 @@ function App() {
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [carouselDirection, setCarouselDirection] = useState('right');
 
   // Limpiar timeout al desmontar el componente
   useEffect(() => {
@@ -44,6 +67,37 @@ function App() {
       }
     };
   }, []);
+
+  // Manejar navegación del carrusel con teclado
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Solo manejar si estamos en la página de respuesta (no en el formulario)
+      if (showForm) return;
+      
+      const parsed = parseResponseSections(response);
+      if (!parsed || !parsed.sections || Object.keys(parsed.sections).length === 0) return;
+
+      // Solo manejar si el usuario no está escribiendo en un input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateCarousel('prev');
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigateCarousel('next');
+      }
+    };
+
+    if (response && !showForm) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [response, carouselIndex, showForm]);
 
   const calculateDays = (departure, returnDate) => {
     if (!departure || !returnDate) return 0;
@@ -620,6 +674,145 @@ function App() {
     }, 200);
   };
 
+  // Función para parsear las secciones de la respuesta
+  const parseResponseSections = (responseText) => {
+    if (!responseText) return null;
+
+    const sections = {};
+    const sectionNames = [
+      'ALOJAMIENTO',
+      'COMIDA LOCAL',
+      'LUGARES IMPERDIBLES',
+      'CONSEJOS LOCALES',
+      'ESTIMACIÓN DE COSTOS'
+    ];
+
+    const lines = responseText.split('\n');
+    let currentSection = null;
+    let currentContent = [];
+    let beforeText = [];
+    let afterText = [];
+    let firstSectionIndex = -1;
+    let lastSectionIndex = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      const trimmedLine = line.trim();
+      if (!trimmedLine) {
+        // Si hay una sección activa, agregar línea vacía al contenido
+        if (currentSection) {
+          currentContent.push('');
+        } else if (firstSectionIndex === -1) {
+          // Antes de la primera sección
+          beforeText.push(line);
+        } else {
+          // Después de la última sección
+          afterText.push(line);
+        }
+        continue;
+      }
+
+      // Verificar si la línea es un encabezado de sección
+      let isSectionHeader = false;
+      let matchedSectionName = null;
+      
+      for (const sectionName of sectionNames) {
+        const upperLine = trimmedLine.toUpperCase();
+        // Buscar patrones como "ALOJAMIENTO |", "ALOJAMIENTO:", "ALOJAMIENTO" al inicio de línea
+        if (upperLine.startsWith(sectionName)) {
+          // Verificar que después del nombre haya un separador o fin de línea
+          const remaining = upperLine.substring(sectionName.length).trim();
+          if (remaining === '' || remaining.startsWith('|') || remaining.startsWith(':')) {
+            // Guardar la sección anterior si existe
+            if (currentSection) {
+              sections[currentSection] = currentContent.join('\n').trim();
+              lastSectionIndex = i - 1;
+            }
+            
+            // Marcar el inicio de la primera sección
+            if (firstSectionIndex === -1) {
+              firstSectionIndex = i;
+            }
+            
+            // Iniciar nueva sección
+            currentSection = sectionName;
+            currentContent = [];
+            isSectionHeader = true;
+            matchedSectionName = sectionName;
+            
+            // Extraer contenido de la misma línea si existe (formato "SECCIÓN | contenido" o "SECCIÓN: contenido")
+            const separatorIndex = trimmedLine.toUpperCase().indexOf(sectionName) + sectionName.length;
+            const afterSection = trimmedLine.substring(separatorIndex).trim();
+            if (afterSection) {
+              // Remover separadores (| o :)
+              const content = afterSection.replace(/^[|:]\s*/, '').trim();
+              if (content) {
+                currentContent.push(content);
+              }
+            }
+            break;
+          }
+        }
+      }
+
+      if (!isSectionHeader) {
+        if (currentSection) {
+          // Agregar contenido a la sección actual
+          currentContent.push(line);
+        } else if (firstSectionIndex === -1) {
+          // Antes de la primera sección
+          beforeText.push(line);
+        } else {
+          // Después de la última sección (pero solo si ya terminamos todas las secciones)
+          // Esto se manejará después del loop
+        }
+      }
+    }
+
+    // Guardar la última sección
+    if (currentSection) {
+      sections[currentSection] = currentContent.join('\n').trim();
+      lastSectionIndex = lines.length - 1;
+    }
+
+    // Extraer texto después de las secciones
+    if (lastSectionIndex >= 0 && lastSectionIndex < lines.length - 1) {
+      afterText = lines.slice(lastSectionIndex + 1);
+    }
+
+    // Verificar si encontramos al menos una sección
+    if (Object.keys(sections).length > 0) {
+      return {
+        sections: sections,
+        beforeText: beforeText.join('\n').trim(),
+        afterText: afterText.join('\n').trim()
+      };
+    }
+
+    return null;
+  };
+
+  // Función para navegar el carrusel
+  const navigateCarousel = (direction) => {
+    if (!response) return;
+    
+    const parsed = parseResponseSections(response);
+    if (!parsed || !parsed.sections) return;
+
+    const sectionKeys = Object.keys(parsed.sections);
+    if (sectionKeys.length === 0) return;
+
+    setCarouselDirection(direction === 'next' ? 'right' : 'left');
+    
+    setCarouselIndex((prevIndex) => {
+      if (direction === 'next') {
+        return (prevIndex + 1) % sectionKeys.length;
+      } else {
+        return (prevIndex - 1 + sectionKeys.length) % sectionKeys.length;
+      }
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -629,6 +822,7 @@ function App() {
 
     setLoading(true);
     setResponse('');
+    setCarouselIndex(0);
 
     try {
       const result = await axios.post(`${API_URL}/api/travel`, {
@@ -648,7 +842,7 @@ function App() {
         errorMessage = 'No se pudo conectar con el servidor. Por favor, verifica que el backend esté corriendo.';
       }
       
-      setResponse(`❌ Error: ${errorMessage}`);
+      setResponse(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -660,7 +854,11 @@ function App() {
         <div className="container">
           <header className="header">
             <h1 className="title">ViajeIA</h1>
-            <p className="subtitle">Alex, tu Consultor Personal de Viajes 🧳✈️</p>
+            <p className="subtitle">
+              Alex, tu Consultor Personal de Viajes{' '}
+              <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
+              <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
+            </p>
           </header>
 
           <main className="main-content">
@@ -673,7 +871,7 @@ function App() {
                   ¿A dónde quieres viajar?
                 </label>
                 <div className="destination-input-wrapper">
-                  <span className="destination-icon">📍</span>
+                  <MapPin className="destination-icon" size={20} />
                   <input
                     type="text"
                     id="destination"
@@ -729,7 +927,7 @@ function App() {
                           onClick={() => handleDestinationSelect(suggestion)}
                           onMouseDown={(e) => e.preventDefault()}
                         >
-                          <span className="suggestion-icon">✈️</span>
+                          <Plane className="suggestion-icon" size={16} />
                           <span className="suggestion-text">{suggestion}</span>
                         </div>
                       ))}
@@ -752,7 +950,7 @@ function App() {
                       Ida
                     </label>
                     <div className="date-input-disabled" onClick={handleOpenDateModal}>
-                      <span className="calendar-icon">📅</span>
+                      <Calendar className="calendar-icon" size={20} />
                       <input
                         type="text"
                         id="departureDate"
@@ -764,13 +962,15 @@ function App() {
                       />
                     </div>
                   </div>
-                  <div className="date-separator">→</div>
+                  <div className="date-separator">
+                    <ArrowRight size={20} />
+                  </div>
                   <div className={`date-input-wrapper ${tripType === 'open' ? 'disabled' : ''}`}>
                     <label htmlFor="returnDate" className="date-label">
                       Vuelta
                     </label>
                     <div className={`date-input-disabled ${tripType === 'open' ? 'disabled' : ''}`} onClick={tripType === 'open' ? undefined : handleOpenDateModal}>
-                      <span className="calendar-icon">📅</span>
+                      <Calendar className="calendar-icon" size={20} />
                       <input
                         type="text"
                         id="returnDate"
@@ -820,7 +1020,8 @@ function App() {
                 {tripType === 'open' && formData.departureDate && (
                   <div className="days-info-row">
                     <span className="days-info-text">
-                      🔓 Viaje abierto desde {new Date(formData.departureDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      <Unlock size={16} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+                      Viaje abierto desde {new Date(formData.departureDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </span>
                   </div>
                 )}
@@ -836,7 +1037,7 @@ function App() {
                         className="date-modal-close"
                         onClick={handleCloseDateModal}
                       >
-                        ×
+                        <X size={24} />
                       </button>
                     </div>
                     
@@ -847,7 +1048,7 @@ function App() {
                           <div className="modal-date-input-wrapper">
                             <label className="modal-date-label">Ida</label>
                             <div className="modal-date-input">
-                              <span className="modal-calendar-icon">📅</span>
+                              <Calendar className="modal-calendar-icon" size={20} />
                               <input
                                 type="text"
                                 value={selectedStartDate ? formatDateForDisplay(selectedStartDate.toISOString().split('T')[0]) : ''}
@@ -859,7 +1060,7 @@ function App() {
                           <div className={`modal-date-input-wrapper ${modalTripType === 'one-way' ? 'disabled' : ''}`}>
                             <label className="modal-date-label">Vuelta</label>
                             <div className="modal-date-input">
-                              <span className="modal-calendar-icon">📅</span>
+                              <Calendar className="modal-calendar-icon" size={20} />
                               <input
                                 type="text"
                                 value={selectedEndDate ? formatDateForDisplay(selectedEndDate.toISOString().split('T')[0]) : ''}
@@ -924,7 +1125,7 @@ function App() {
                           className="calendar-nav-button"
                           onClick={() => navigateMonth(-1)}
                         >
-                          ‹
+                          <ChevronLeft size={24} />
                         </button>
                         <div className="calendar-months">
                           <div className="calendar-month-header">
@@ -943,7 +1144,7 @@ function App() {
                           className="calendar-nav-button"
                           onClick={() => navigateMonth(1)}
                         >
-                          ›
+                          <ChevronRight size={24} />
                         </button>
                       </div>
 
@@ -977,7 +1178,7 @@ function App() {
                     ¿Cuántas personas viajan?
                   </label>
                   <div className="travelers-input-disabled" onClick={handleOpenTravelersModal}>
-                    <span className="travelers-icon">👥</span>
+                    <Users className="travelers-icon" size={20} />
                     <input
                       type="text"
                       className="form-input travelers-input-disabled-field"
@@ -1021,7 +1222,7 @@ function App() {
                         className="travelers-modal-close"
                         onClick={handleCloseTravelersModal}
                       >
-                        ×
+                        <X size={24} />
                       </button>
                     </div>
                     
@@ -1030,7 +1231,7 @@ function App() {
                       
                       <div className="traveler-stepper">
                         <div className="traveler-label">
-                          <span className="traveler-icon">🧑</span>
+                          <User className="traveler-icon" size={20} />
                           <span className="traveler-text">Adultos</span>
                         </div>
                         <div className="stepper-controls">
@@ -1040,7 +1241,7 @@ function App() {
                             onClick={() => handleTravelerChange('adults', -1)}
                             disabled={formData.adults <= 1}
                           >
-                            −
+                            <Minus size={18} />
                           </button>
                           <span className="stepper-value">{formData.adults}</span>
                           <button
@@ -1048,14 +1249,14 @@ function App() {
                             className="stepper-button"
                             onClick={() => handleTravelerChange('adults', 1)}
                           >
-                            +
+                            <Plus size={18} />
                           </button>
                         </div>
                       </div>
 
                       <div className="traveler-stepper">
                         <div className="traveler-label">
-                          <span className="traveler-icon">🧒</span>
+                          <User className="traveler-icon" size={18} />
                           <span className="traveler-text">Niños</span>
                         </div>
                         <div className="stepper-controls">
@@ -1065,7 +1266,7 @@ function App() {
                             onClick={() => handleTravelerChange('children', -1)}
                             disabled={formData.children <= 0}
                           >
-                            −
+                            <Minus size={18} />
                           </button>
                           <span className="stepper-value">{formData.children}</span>
                           <button
@@ -1080,7 +1281,7 @@ function App() {
 
                       <div className="traveler-stepper">
                         <div className="traveler-label">
-                          <span className="traveler-icon">👶</span>
+                          <Baby className="traveler-icon" size={20} />
                           <span className="traveler-text">Bebés</span>
                         </div>
                         <div className="stepper-controls">
@@ -1090,7 +1291,7 @@ function App() {
                             onClick={() => handleTravelerChange('infants', -1)}
                             disabled={formData.infants <= 0}
                           >
-                            −
+                            <Minus size={18} />
                           </button>
                           <span className="stepper-value">{formData.infants}</span>
                           <button
@@ -1131,21 +1332,24 @@ function App() {
                     className={`preference-button ${formData.preference === 'aventura' ? 'active' : ''}`}
                     onClick={() => setFormData(prev => ({ ...prev, preference: 'aventura' }))}
                   >
-                    🏔️ Aventura
+                    <Mountain size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                    Aventura
                   </button>
                   <button
                     type="button"
                     className={`preference-button ${formData.preference === 'relajación' ? 'active' : ''}`}
                     onClick={() => setFormData(prev => ({ ...prev, preference: 'relajación' }))}
                   >
-                    🏖️ Relajación
+                    <Umbrella size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                    Relajación
                   </button>
                   <button
                     type="button"
                     className={`preference-button ${formData.preference === 'cultura' ? 'active' : ''}`}
                     onClick={() => setFormData(prev => ({ ...prev, preference: 'cultura' }))}
                   >
-                    🏛️ Cultura
+                    <Landmark size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                    Cultura
                   </button>
                 </div>
               </div>
@@ -1162,7 +1366,7 @@ function App() {
                   !formData.preference
                 }
               >
-                Continuar →
+                Continuar <ArrowRight size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
               </button>
             </form>
           </main>
@@ -1176,7 +1380,11 @@ function App() {
       <div className="container">
         <header className="header">
           <h1 className="title">ViajeIA</h1>
-          <p className="subtitle">Alex, tu Consultor Personal de Viajes 🧳✈️</p>
+          <p className="subtitle">
+            Alex, tu Consultor Personal de Viajes{' '}
+            <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
+            <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
+          </p>
         </header>
 
         <main className="main-content">
@@ -1185,7 +1393,8 @@ function App() {
             onClick={() => setShowForm(true)}
             className="back-to-form-button"
           >
-            ← Modificar información del viaje
+            <ArrowLeft size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '6px' }} />
+            Modificar información del viaje
           </button>
 
           <form onSubmit={handleSubmit} className="form">
@@ -1209,16 +1418,101 @@ function App() {
             </button>
           </form>
 
-          {response && (
-            <div className="response-container">
-              <div className="response-header">
-                <h2>Respuesta de Alex 🧳</h2>
-              </div>
-              <div className="response-content">
-                <div className="response-text">{response}</div>
-              </div>
-            </div>
-          )}
+          {response && (() => {
+            const parsed = parseResponseSections(response);
+            
+            if (parsed && parsed.sections) {
+              // Mostrar carrusel si hay secciones
+              const sectionKeys = Object.keys(parsed.sections);
+              const currentSectionKey = sectionKeys[carouselIndex];
+              const currentSectionContent = parsed.sections[currentSectionKey];
+
+              return (
+                <div className="response-container">
+                  <div className="response-header">
+                    <h2>
+                      Respuesta de Alex{' '}
+                      <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
+                    </h2>
+                  </div>
+                  <div className="response-content">
+                    {/* Mostrar texto antes de las secciones si existe */}
+                    {parsed.beforeText && (
+                      <div className="response-text response-text-before">
+                        {parsed.beforeText}
+                      </div>
+                    )}
+                    
+                    {/* Carrusel con las secciones */}
+                    <div className="carousel-container">
+                      <button
+                        className="carousel-button carousel-button-left"
+                        onClick={() => navigateCarousel('prev')}
+                        aria-label="Sección anterior"
+                      >
+                        <ChevronLeft size={24} />
+                      </button>
+                      
+                      <div className="carousel-slide">
+                        <div className={`carousel-card ${carouselDirection === 'left' ? 'slide-left' : ''}`} key={carouselIndex}>
+                          <div className="carousel-section-header">
+                            <h3 className="carousel-section-title">{currentSectionKey}</h3>
+                            <div className="carousel-indicator">
+                              {carouselIndex + 1} / {sectionKeys.length}
+                            </div>
+                          </div>
+                          <div className="carousel-section-content">
+                            <div className="response-text">{currentSectionContent}</div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button
+                        className="carousel-button carousel-button-right"
+                        onClick={() => navigateCarousel('next')}
+                        aria-label="Siguiente sección"
+                      >
+                        <ChevronRight size={24} />
+                      </button>
+                    </div>
+                    
+                    <div className="carousel-dots">
+                      {sectionKeys.map((_, index) => (
+                        <button
+                          key={index}
+                          className={`carousel-dot ${index === carouselIndex ? 'active' : ''}`}
+                          onClick={() => setCarouselIndex(index)}
+                          aria-label={`Ir a sección ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                    
+                    {/* Mostrar texto después de las secciones si existe */}
+                    {parsed.afterText && (
+                      <div className="response-text response-text-after">
+                        {parsed.afterText}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            } else {
+              // Mostrar respuesta normal si no hay secciones
+              return (
+                <div className="response-container">
+                  <div className="response-header">
+                    <h2>
+                      Respuesta de Alex{' '}
+                      <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
+                    </h2>
+                  </div>
+                  <div className="response-content">
+                    <div className="response-text">{response}</div>
+                  </div>
+                </div>
+              );
+            }
+          })()}
         </main>
       </div>
     </div>

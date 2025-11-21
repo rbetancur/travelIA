@@ -174,6 +174,298 @@
   margin: 8px 0;
 }
 
+/* Carousel Styles */
+.carousel-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 300px;
+  padding: 20px 0;
+}
+
+.carousel-button {
+  width: 50px;
+  height: 50px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  color: #2563eb;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  z-index: 10;
+  position: relative;
+  padding: 0;
+}
+
+.carousel-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+.carousel-button:hover {
+  color: white;
+  transform: scale(1.15) translateY(-2px);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3), 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.carousel-button:hover::before {
+  opacity: 1;
+}
+
+.carousel-button:active {
+  transform: scale(1.05) translateY(0);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.carousel-button-left {
+  order: 1;
+}
+
+.carousel-button-right {
+  order: 3;
+}
+
+.carousel-slide {
+  flex: 1;
+  order: 2;
+  position: relative;
+  perspective: 1000px;
+  overflow: hidden;
+}
+
+.carousel-card {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  position: relative;
+  overflow: hidden;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  animation: cardSlideIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+@keyframes cardSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(30px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.carousel-card.slide-left {
+  animation: cardSlideInLeft 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes cardSlideInLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.carousel-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #2563eb 0%, #1e40af 50%, #2563eb 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.carousel-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.02) 0%, rgba(30, 64, 175, 0.02) 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.carousel-card:hover::after {
+  opacity: 1;
+}
+
+@keyframes shimmer {
+  0%, 100% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 0%;
+  }
+}
+
+.carousel-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e5e7eb;
+  position: relative;
+}
+
+.carousel-section-header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, #2563eb 0%, #1e40af 100%);
+  border-radius: 2px;
+}
+
+.carousel-section-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  position: relative;
+}
+
+.carousel-indicator {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  padding: 8px 16px;
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  min-width: 60px;
+  text-align: center;
+}
+
+.carousel-section-content {
+  flex: 1;
+  min-height: 150px;
+  position: relative;
+  overflow: hidden;
+}
+
+.carousel-section-content .response-text {
+  position: relative;
+  z-index: 1;
+}
+
+.carousel-section-content .response-text {
+  animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.carousel-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.carousel-dot::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.1);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.carousel-dot:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+  transform: scale(1.3);
+}
+
+.carousel-dot:hover::before {
+  opacity: 1;
+}
+
+.carousel-dot.active {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  border-color: #2563eb;
+  width: 14px;
+  height: 14px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+}
+
+.carousel-dot.active::before {
+  opacity: 1;
+  background: rgba(37, 99, 235, 0.2);
+}
+
+/* Estilos para texto antes y después del carrusel */
+.response-text-before {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.response-text-after {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
 /* Survey Form Styles */
 .survey-form {
   animation: fadeIn 0.5s ease-in;
@@ -257,9 +549,9 @@
 .destination-icon {
   position: absolute;
   left: 16px;
-  font-size: 1.2rem;
   z-index: 1;
   pointer-events: none;
+  color: #6b7280;
 }
 
 .destination-input {
@@ -333,8 +625,8 @@
 }
 
 .suggestion-icon {
-  font-size: 1rem;
   flex-shrink: 0;
+  color: #6b7280;
 }
 
 .suggestion-text {
@@ -379,6 +671,10 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.preference-button svg {
+  flex-shrink: 0;
 }
 
 .preference-button:hover {
@@ -462,9 +758,9 @@
 .calendar-icon {
   position: absolute;
   left: 16px;
-  font-size: 1.2rem;
   z-index: 1;
   pointer-events: none;
+  color: #6b7280;
 }
 
 .date-input-disabled-field {
@@ -529,15 +825,14 @@
 }
 
 .date-separator {
-  font-size: 1.5rem;
   color: #9ca3af;
-  font-weight: 300;
   flex-shrink: 0;
   align-self: flex-end;
   margin-bottom: 0;
   height: 40px;
   display: flex;
   align-items: center;
+  justify-content: center;
   line-height: 1;
 }
 
@@ -825,9 +1120,9 @@
 .travelers-icon {
   position: absolute;
   left: 16px;
-  font-size: 1.2rem;
   z-index: 1;
   pointer-events: none;
+  color: #6b7280;
 }
 
 .travelers-input-disabled-field {
@@ -865,7 +1160,8 @@
 }
 
 .traveler-icon {
-  font-size: 1.2rem;
+  color: #6b7280;
+  flex-shrink: 0;
 }
 
 .traveler-text {
@@ -887,14 +1183,12 @@
   border-radius: 8px;
   background: white;
   color: #374151;
-  font-size: 1.2rem;
-  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
+  padding: 0;
 }
 
 .stepper-button:hover:not(:disabled) {
@@ -991,7 +1285,6 @@
 .date-modal-close {
   background: none;
   border: none;
-  font-size: 2rem;
   color: #6b7280;
   cursor: pointer;
   width: 32px;
@@ -1001,6 +1294,7 @@
   justify-content: center;
   border-radius: 8px;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .date-modal-close:hover {
@@ -1050,9 +1344,9 @@
 .modal-calendar-icon {
   position: absolute;
   left: 10px;
-  font-size: 0.95rem;
   z-index: 1;
   pointer-events: none;
+  color: #6b7280;
 }
 
 .modal-date-input input {
@@ -1356,7 +1650,6 @@
 .travelers-modal-close {
   background: none;
   border: none;
-  font-size: 1.75rem;
   color: #6b7280;
   cursor: pointer;
   width: 36px;
@@ -1366,7 +1659,7 @@
   justify-content: center;
   border-radius: 8px;
   transition: all 0.2s ease;
-  line-height: 1;
+  padding: 0;
 }
 
 .travelers-modal-close:hover {
@@ -1752,6 +2045,65 @@
   .travelers-modal-confirm {
     font-size: 1rem;
     padding: 14px 20px;
+  }
+
+  /* Responsive Carousel Styles */
+  .carousel-container {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px 0;
+  }
+
+  .carousel-button {
+    width: 44px;
+    height: 44px;
+    font-size: 1.6rem;
+    order: 2;
+  }
+
+  .carousel-button-left {
+    order: 1;
+  }
+
+  .carousel-button-right {
+    order: 3;
+  }
+
+  .carousel-slide {
+    order: 2;
+    width: 100%;
+  }
+
+  .carousel-card {
+    padding: 24px;
+    min-height: 240px;
+    border-radius: 16px;
+  }
+
+  .carousel-section-header {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+  }
+
+  .carousel-section-title {
+    font-size: 1.3rem;
+    letter-spacing: 0.5px;
+  }
+
+  .carousel-indicator {
+    font-size: 0.75rem;
+    padding: 6px 12px;
+    min-width: 50px;
+  }
+
+  .carousel-section-content {
+    min-height: 120px;
+  }
+
+  .carousel-dots {
+    margin-top: 24px;
+    padding-top: 20px;
+    gap: 8px;
   }
 }
 
