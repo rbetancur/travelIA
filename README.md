@@ -1,185 +1,179 @@
-# ViajeIA - Tu Asistente Personal de Viajes
+# 🌍 ViajeIA - Asistente Personal de Viajes
 
-Aplicación web moderna para asistencia en planificación de viajes, construida con React (frontend) y Python FastAPI (backend).
+Aplicación web para planificación de viajes con inteligencia artificial, construida con React y FastAPI.
 
-## 🏗️ Arquitectura
+## 🚀 Inicio Rápido (5 Pasos)
 
-El proyecto está dividido en dos partes principales:
+### Paso 1: Obtener API Key de Google Gemini
 
-- **Frontend**: React aplicación cliente
-- **Backend**: API REST con FastAPI
+1. Ve a [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Inicia sesión con tu cuenta de Google
+3. Crea una nueva API Key
+4. Copia la API Key (la necesitarás en el Paso 3)
 
-## ⚡ Inicio Rápido
+### Paso 2: Instalar Backend
 
-### Primera vez (instalación inicial)
-
-**Backend:**
 ```bash
 cd backend
 python3 -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**Frontend:**
+### Paso 3: Configurar API Key
+
+**Linux/Mac:**
 ```bash
-cd frontend
-npm install
+export GEMINI_API_KEY=tu_api_key_aqui
 ```
 
-### Comandos para iniciar (después de la instalación)
+**Windows (PowerShell):**
+```powershell
+$env:GEMINI_API_KEY="tu_api_key_aqui"
+```
 
-**Terminal 1 - Backend:**
+**Windows (CMD):**
+```cmd
+set GEMINI_API_KEY=tu_api_key_aqui
+```
+
+> 💡 **Para hacerlo permanente:** Agrega el comando a `~/.bashrc` o `~/.zshrc` (Linux/Mac) o configura en Variables de Entorno (Windows).
+
+### Paso 4: Iniciar Backend
+
 ```bash
 cd backend
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 uvicorn main:app --reload --port 8000
 ```
 
-**Terminal 2 - Frontend:**
+Deberías ver: `✅ API Key de Gemini configurada`
+
+### Paso 5: Iniciar Frontend
+
+En una **nueva terminal**:
+
 ```bash
 cd frontend
+npm install  # Solo la primera vez
 npm start
 ```
 
-### URLs de acceso
+La aplicación se abrirá automáticamente en `http://localhost:3000`
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
+---
+
+## ✅ Verificación
+
+### ¿Funciona el backend?
+Visita: http://localhost:8000/api/health
+
+Deberías ver: `{"status": "ok"}`
+
+### ¿Funciona el frontend?
+Visita: http://localhost:3000
+
+Deberías ver la interfaz de ViajeIA.
+
+---
+
+## 📋 URLs Importantes
+
+- **Aplicación**: http://localhost:3000
+- **API Backend**: http://localhost:8000
 - **Documentación API**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/api/health
 
-## 🚀 Instalación y Configuración Detallada
+---
 
-### Backend
+## 🔧 Solución de Problemas
 
-1. Navega al directorio del backend:
+### ❌ Error: "API key no configurada"
+
+**Solución:** Verifica que la variable de entorno esté configurada:
+
+```bash
+echo $GEMINI_API_KEY  # Linux/Mac
+$env:GEMINI_API_KEY   # Windows PowerShell
+```
+
+Si no aparece nada, vuelve al Paso 3.
+
+### ❌ Error: "No module named 'fastapi'"
+
+**Solución:** Activa el entorno virtual e instala dependencias:
+
 ```bash
 cd backend
-```
-
-2. Crea un entorno virtual (recomendado):
-```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-```
-
-3. Instala las dependencias:
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Ejecuta el servidor:
+### ❌ Frontend no se conecta al backend
+
+**Solución:** Asegúrate de que:
+1. El backend esté corriendo en `http://localhost:8000`
+2. No haya errores en la consola del backend
+3. El frontend esté en `http://localhost:3000`
+
+---
+
+## 🤖 Modelo de IA
+
+El proyecto usa **`gemini-2.0-flash`** (100% gratuito) por defecto.
+
+✅ **Modelos gratuitos disponibles:**
+- `gemini-2.0-flash` (por defecto)
+- `gemini-2.5-flash`
+- `gemini-flash-latest`
+
+Para cambiar el modelo:
+
 ```bash
-uvicorn main:app --reload --port 8000
+export GEMINI_MODEL=gemini-2.5-flash
 ```
 
-El backend estará disponible en `http://localhost:8000`
-La documentación automática de la API estará en `http://localhost:8000/docs`
+> ⚠️ **Importante:** Solo se permiten modelos Flash (gratuitos). Los modelos Pro están bloqueados automáticamente.
 
-### Frontend
-
-1. Navega al directorio del frontend:
-```bash
-cd frontend
-```
-
-2. Instala las dependencias:
-```bash
-npm install
-```
-
-3. Ejecuta la aplicación en modo desarrollo:
-```bash
-npm start
-```
-
-El frontend se abrirá automáticamente en `http://localhost:3000`
+---
 
 ## 📁 Estructura del Proyecto
 
 ```
 ViajeIA/
 ├── backend/
-│   ├── main.py              # Aplicación FastAPI
-│   └── requirements.txt     # Dependencias de Python
-├── frontend/
-│   ├── public/
-│   │   └── index.html
-│   ├── src/
-│   │   ├── App.js           # Componente principal
-│   │   ├── App.css          # Estilos del componente
-│   │   ├── index.js         # Punto de entrada
-│   │   └── index.css        # Estilos globales
-│   └── package.json         # Dependencias de Node.js
-└── README.md
+│   ├── main.py           # API FastAPI
+│   └── requirements.txt  # Dependencias Python
+└── frontend/
+    ├── src/
+    │   └── App.js        # Componente principal React
+    └── package.json      # Dependencias Node.js
 ```
 
-## 🎨 Características
+---
 
-- ✅ Interfaz moderna y responsiva con colores azules y blancos
-- ✅ Campo de texto para preguntas sobre viajes
-- ✅ Botón para enviar consultas
-- ✅ Área de respuestas con diseño elegante
-- ✅ Arquitectura separada frontend/backend
-- ✅ CORS configurado para comunicación entre servicios
-- ✅ **Integrado con Google Gemini** para respuestas inteligentes sobre viajes
+## 🛑 Detener los Servidores
 
-## 🤖 Integración con Google Gemini
+Presiona `Ctrl + C` en cada terminal donde estén corriendo.
 
-El proyecto está integrado con Google Gemini AI para generar respuestas inteligentes y detalladas sobre planificación de viajes.
+---
 
-**Configuración de la API Key (Variable de Entorno):**
+## 📚 Documentación Adicional
 
-La API key se configura mediante una variable de entorno del sistema. **NO se usan archivos .env** por seguridad.
+- **`COMANDOS.md`** - Referencia rápida de comandos
+- **`SECRETS.md`** - Gestión avanzada de secrets (producción)
 
-**Linux/Mac:**
-```bash
-export GEMINI_API_KEY=tu_api_key_de_gemini_aqui
-```
+---
 
-**Windows (PowerShell):**
-```powershell
-$env:GEMINI_API_KEY="tu_api_key_de_gemini_aqui"
-```
+## 🎯 Tecnologías
 
-**Windows (CMD):**
-```cmd
-set GEMINI_API_KEY=tu_api_key_de_gemini_aqui
-```
-
-**Para hacerlo permanente:**
-- Linux/Mac: Agrega el comando `export` a tu `~/.bashrc` o `~/.zshrc`
-- Windows: Configura en las variables de entorno del sistema (Panel de Control)
-
-**Verificar que está configurada:**
-```bash
-echo $GEMINI_API_KEY  # Linux/Mac
-echo %GEMINI_API_KEY%  # Windows CMD
-$env:GEMINI_API_KEY   # Windows PowerShell
-```
-
-Ver `SECRETS.md` para más opciones avanzadas (Docker, Kubernetes, Cloud Secrets).
-
-**Modelo utilizado:** `gemini-2.0-flash` (100% gratuito, rápido y eficiente)
-
-⚠️ **IMPORTANTE:** El proyecto está configurado para usar **SOLO modelos GRATUITOS** de Gemini (Flash). Los modelos Pro están bloqueados para evitar costos inesperados. Ver `backend/MODELOS_GRATUITOS.md` para más detalles.
-
-## 🔧 Tecnologías Utilizadas
-
-- **Frontend**: React 18, Axios
-- **Backend**: FastAPI, Uvicorn, Pydantic
+- **Frontend**: React 18
+- **Backend**: FastAPI, Python 3.9+
 - **IA**: Google Gemini AI
-- **Estilos**: CSS3 con gradientes y animaciones
+- **Comunicación**: REST API, CORS configurado
 
-## 📝 Próximos Pasos
-
-- ✅ Integración con Google Gemini
-- Historial de conversaciones
-- Guardado de planes de viaje
-- Integración con APIs de viajes (vuelos, hoteles, etc.)
-- Mejoras en el prompt para respuestas más personalizadas
+---
 
 ## 📄 Licencia
 
-Este proyecto es de código abierto y está disponible para uso personal y educativo.
-
+Código abierto para uso personal y educativo.

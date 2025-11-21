@@ -1,80 +1,47 @@
-# ViajeIA Backend
+# Backend - ViajeIA
 
-Backend API para ViajeIA construido con FastAPI e integrado con Google Gemini.
+API REST construida con FastAPI e integrada con Google Gemini.
 
-## Instalación
+## 🚀 Inicio Rápido
 
-1. Crea un entorno virtual:
+### 1. Instalar dependencias
 ```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-```
-
-2. Instala las dependencias:
-```bash
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Configura la API key de Gemini como variable de entorno:
-   
-   **Linux/Mac:**
-   ```bash
-   export GEMINI_API_KEY=tu_api_key_aqui
-   ```
-   
-   **Windows (PowerShell):**
-   ```powershell
-   $env:GEMINI_API_KEY="tu_api_key_aqui"
-   ```
-   
-   **Windows (CMD):**
-   ```cmd
-   set GEMINI_API_KEY=tu_api_key_aqui
-   ```
-   
-   **Verificar que está configurada:**
-   ```bash
-   echo $GEMINI_API_KEY  # Linux/Mac
-   $env:GEMINI_API_KEY   # Windows PowerShell
-   ```
-   
-   ⚠️ **IMPORTANTE:** El proyecto usa SOLO variables de entorno del sistema. NO se usan archivos `.env` por seguridad.
+### 2. Configurar API Key
+```bash
+export GEMINI_API_KEY=tu_api_key_aqui  # Linux/Mac
+# Ver README.md principal para más opciones
+```
 
-## Ejecución
-
-Para ejecutar el servidor en modo desarrollo:
-
+### 3. Ejecutar servidor
 ```bash
 uvicorn main:app --reload --port 8000
 ```
 
-El servidor estará disponible en:
-- API: http://localhost:8000
-- Documentación interactiva: http://localhost:8000/docs
-- Documentación alternativa: http://localhost:8000/redoc
+El servidor estará en: http://localhost:8000
 
-## Endpoints
+## 📋 Endpoints
 
-- `GET /`: Verificación de estado
-- `GET /api/health`: Health check
-- `POST /api/travel`: Procesar pregunta sobre viajes usando Google Gemini
-  - Body: `{"question": "tu pregunta aquí"}`
-  - Response: `{"answer": "respuesta del asistente generada por Gemini"}`
+- `GET /` - Estado del servidor
+- `GET /api/health` - Health check
+- `POST /api/travel` - Procesar pregunta de viajes
+  - Body: `{"question": "tu pregunta"}`
+  - Response: `{"answer": "respuesta generada"}`
 
-## Integración con Gemini
+## 📚 Documentación API
 
-El backend está integrado con Google Gemini para generar respuestas inteligentes sobre viajes.
+- Interactiva: http://localhost:8000/docs
+- Alternativa: http://localhost:8000/redoc
 
-- Se usa el modelo `gemini-2.0-flash` de Google (rápido y eficiente)
-- La API key se configura mediante variables de entorno del sistema
-- NO se usan archivos `.env` por seguridad
-- El sistema está diseñado para ser simple y fácil de usar
+## 🔧 Configuración
 
-## Próximos Pasos
+- **API Key**: Variable de entorno `GEMINI_API_KEY` (requerida)
+- **Modelo**: Variable de entorno `GEMINI_MODEL` (opcional, por defecto: `gemini-2.0-flash`)
 
-- ✅ Integración con Google Gemini
-- Persistencia de conversaciones
-- Autenticación de usuarios
-- Cache de respuestas
-- Mejoras en el prompt para respuestas más personalizadas
+## 📖 Más Información
 
+Ver `../README.md` para documentación completa del proyecto.
