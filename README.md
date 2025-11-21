@@ -116,25 +116,68 @@ ViajeIA/
 
 ## 🎨 Características
 
-- Interfaz moderna y responsiva con colores azules y blancos
-- Campo de texto para preguntas sobre viajes
-- Botón para enviar consultas
-- Área de respuestas con diseño elegante
-- Arquitectura separada frontend/backend
-- CORS configurado para comunicación entre servicios
+- ✅ Interfaz moderna y responsiva con colores azules y blancos
+- ✅ Campo de texto para preguntas sobre viajes
+- ✅ Botón para enviar consultas
+- ✅ Área de respuestas con diseño elegante
+- ✅ Arquitectura separada frontend/backend
+- ✅ CORS configurado para comunicación entre servicios
+- ✅ **Integrado con Google Gemini** para respuestas inteligentes sobre viajes
+
+## 🤖 Integración con Google Gemini
+
+El proyecto está integrado con Google Gemini AI para generar respuestas inteligentes y detalladas sobre planificación de viajes.
+
+**Configuración de la API Key (Variable de Entorno):**
+
+La API key se configura mediante una variable de entorno del sistema. **NO se usan archivos .env** por seguridad.
+
+**Linux/Mac:**
+```bash
+export GEMINI_API_KEY=tu_api_key_de_gemini_aqui
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:GEMINI_API_KEY="tu_api_key_de_gemini_aqui"
+```
+
+**Windows (CMD):**
+```cmd
+set GEMINI_API_KEY=tu_api_key_de_gemini_aqui
+```
+
+**Para hacerlo permanente:**
+- Linux/Mac: Agrega el comando `export` a tu `~/.bashrc` o `~/.zshrc`
+- Windows: Configura en las variables de entorno del sistema (Panel de Control)
+
+**Verificar que está configurada:**
+```bash
+echo $GEMINI_API_KEY  # Linux/Mac
+echo %GEMINI_API_KEY%  # Windows CMD
+$env:GEMINI_API_KEY   # Windows PowerShell
+```
+
+Ver `SECRETS.md` para más opciones avanzadas (Docker, Kubernetes, Cloud Secrets).
+
+**Modelo utilizado:** `gemini-2.0-flash` (100% gratuito, rápido y eficiente)
+
+⚠️ **IMPORTANTE:** El proyecto está configurado para usar **SOLO modelos GRATUITOS** de Gemini (Flash). Los modelos Pro están bloqueados para evitar costos inesperados. Ver `backend/MODELOS_GRATUITOS.md` para más detalles.
 
 ## 🔧 Tecnologías Utilizadas
 
 - **Frontend**: React 18, Axios
 - **Backend**: FastAPI, Uvicorn, Pydantic
+- **IA**: Google Gemini AI
 - **Estilos**: CSS3 con gradientes y animaciones
 
 ## 📝 Próximos Pasos
 
-- Integración con modelos de IA para respuestas más inteligentes
+- ✅ Integración con Google Gemini
 - Historial de conversaciones
 - Guardado de planes de viaje
 - Integración con APIs de viajes (vuelos, hoteles, etc.)
+- Mejoras en el prompt para respuestas más personalizadas
 
 ## 📄 Licencia
 

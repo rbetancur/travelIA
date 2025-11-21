@@ -20,10 +20,28 @@ npm install
 
 ## 🚀 Iniciar el Proyecto
 
+### Configurar API Key (primero, solo una vez)
+
+**Linux/Mac:**
+```bash
+export GEMINI_API_KEY=tu_api_key_de_gemini_aqui
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:GEMINI_API_KEY="tu_api_key_de_gemini_aqui"
+```
+
+**Windows (CMD):**
+```cmd
+set GEMINI_API_KEY=tu_api_key_de_gemini_aqui
+```
+
 ### Backend (Terminal 1)
 ```bash
 cd backend
 source venv/bin/activate        # En Windows: venv\Scripts\activate
+# Asegúrate de que GEMINI_API_KEY esté configurada antes de ejecutar
 uvicorn main:app --reload --port 8000
 ```
 
