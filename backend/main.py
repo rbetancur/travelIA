@@ -43,6 +43,14 @@ class TravelResponse(BaseModel):
     answer: str
 
 
+class DestinationsResponse(BaseModel):
+    destinations: list[str]
+
+
+class DestinationSearchQuery(BaseModel):
+    query: str
+
+
 @app.get("/")
 def read_root():
     return {"message": "ViajeIA API is running"}
@@ -157,6 +165,271 @@ Responde como Alex, haciendo preguntas relevantes si necesitas más información
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=full_error)
+
+
+@app.get("/api/destinations/popular", response_model=DestinationsResponse)
+async def get_popular_destinations():
+    """
+    Endpoint para obtener los 5 destinos más populares/recomendados usando Gemini
+    """
+    try:
+        # Verificar que la API key esté configurada
+        if not GEMINI_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="API key de Gemini no configurada. Por favor, configura la variable de entorno GEMINI_API_KEY. Ver SECRETS.md para instrucciones."
+            )
+        
+        # Crear el prompt para Gemini para obtener destinos populares
+        prompt = """Eres un experto en viajes y turismo. 
+
+Tu tarea es proporcionar una lista de exactamente 5 destinos turísticos populares y recomendados en formato JSON.
+
+IMPORTANTE:
+- Devuelve SOLO un array JSON con exactamente 5 destinos
+- Cada destino debe incluir el nombre de la ciudad y el país (ejemplo: "París, Francia")
+- Los destinos deben ser diversos geográficamente (diferentes continentes)
+- Incluye destinos populares y reconocidos mundialmente
+- El formato debe ser: ["Destino 1", "Destino 2", "Destino 3", "Destino 4", "Destino 5"]
+- NO incluyas explicaciones, solo el array JSON
+
+Ejemplo de formato esperado:
+["París, Francia", "Tokio, Japón", "Nueva York, Estados Unidos", "Bali, Indonesia", "Barcelona, España"]
+
+Responde SOLO con el array JSON, sin texto adicional."""
+
+        # Inicializar el modelo de Gemini
+        GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        
+        # Validar que solo se usen modelos gratuitos (Flash)
+        model_lower = GEMINI_MODEL.lower()
+        is_free_model = (
+            "flash" in model_lower or 
+            model_lower == "gemini-pro-latest" or
+            model_lower == "models/gemini-pro-latest"
+        )
+        
+        if not is_free_model:
+            raise HTTPException(
+                status_code=400,
+                detail=f"❌ Modelo '{GEMINI_MODEL}' NO permitido. Solo se permiten modelos GRATUITOS de Gemini."
+            )
+        
+        model = genai.GenerativeModel(GEMINI_MODEL)
+        
+        # Generar la respuesta
+        response = model.generate_content(prompt)
+        
+        # Extraer el texto de la respuesta
+        if not response:
+            raise HTTPException(
+                status_code=500,
+                detail="No se recibió respuesta de Gemini"
+            )
+        
+        response_text = None
+        if hasattr(response, 'text') and response.text:
+            response_text = response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            if len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    parts = candidate.content.parts
+                    if parts and len(parts) > 0:
+                        response_text = parts[0].text if hasattr(parts[0], 'text') else str(parts[0])
+        
+        if not response_text:
+            raise HTTPException(
+                status_code=500,
+                detail="La respuesta de Gemini está vacía o en formato inesperado"
+            )
+        
+        # Limpiar la respuesta para extraer solo el JSON
+        response_text = response_text.strip()
+        
+        # Intentar extraer el JSON de la respuesta
+        import json
+        import re
+        
+        # Buscar un array JSON en la respuesta
+        json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(0)
+            try:
+                destinations = json.loads(json_str)
+                # Validar que sea una lista y tenga máximo 5 elementos
+                if isinstance(destinations, list) and len(destinations) > 0:
+                    # Limitar a 5 destinos
+                    destinations = destinations[:5]
+                    return DestinationsResponse(destinations=destinations)
+            except json.JSONDecodeError:
+                pass
+        
+        # Si no se pudo parsear, intentar parsear toda la respuesta como JSON
+        try:
+            destinations = json.loads(response_text)
+            if isinstance(destinations, list) and len(destinations) > 0:
+                destinations = destinations[:5]
+                return DestinationsResponse(destinations=destinations)
+        except json.JSONDecodeError:
+            pass
+        
+        # Si falla todo, devolver destinos por defecto
+        default_destinations = [
+            "París, Francia",
+            "Tokio, Japón",
+            "Nueva York, Estados Unidos",
+            "Bali, Indonesia",
+            "Barcelona, España"
+        ]
+        return DestinationsResponse(destinations=default_destinations)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_type = type(e).__name__
+        error_message = str(e) if str(e) else "Error desconocido"
+        full_error = f"Error al obtener destinos populares ({error_type}): {error_message}"
+        print(f"Error completo: {full_error}")
+        import traceback
+        traceback.print_exc()
+        # En caso de error, devolver destinos por defecto
+        default_destinations = [
+            "París, Francia",
+            "Tokio, Japón",
+            "Nueva York, Estados Unidos",
+            "Bali, Indonesia",
+            "Barcelona, España"
+        ]
+        return DestinationsResponse(destinations=default_destinations)
+
+
+@app.post("/api/destinations/search", response_model=DestinationsResponse)
+async def search_destinations(search_query: DestinationSearchQuery):
+    """
+    Endpoint para buscar destinos basado en lo que el usuario está escribiendo usando Gemini
+    """
+    try:
+        # Verificar que la API key esté configurada
+        if not GEMINI_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="API key de Gemini no configurada. Por favor, configura la variable de entorno GEMINI_API_KEY. Ver SECRETS.md para instrucciones."
+            )
+        
+        # Si el query está vacío, devolver lista vacía
+        if not search_query.query or not search_query.query.strip():
+            return DestinationsResponse(destinations=[])
+        
+        query = search_query.query.strip()
+        
+        # Crear el prompt para Gemini para buscar destinos
+        prompt = f"""Eres un experto en viajes y turismo. 
+
+El usuario está escribiendo: "{query}"
+
+Tu tarea es sugerir destinos turísticos que coincidan con lo que el usuario está escribiendo.
+
+IMPORTANTE:
+- Devuelve SOLO un array JSON con máximo 5 destinos que coincidan con "{query}"
+- Cada destino debe incluir el nombre de la ciudad y el país (ejemplo: "Aruba, Aruba" o "Auckland, Nueva Zelanda")
+- Si "{query}" es parte de un nombre de ciudad o país, sugiere destinos que contengan ese texto
+- Los destinos deben ser reales y reconocidos
+- El formato debe ser: ["Destino 1", "Destino 2", "Destino 3", ...]
+- NO incluyas explicaciones, solo el array JSON
+- Si no encuentras destinos relevantes, devuelve un array vacío []
+
+Ejemplos:
+- Si el usuario escribe "aru", sugiere: ["Aruba, Aruba"]
+- Si el usuario escribe "barc", sugiere: ["Barcelona, España"]
+- Si el usuario escribe "tok", sugiere: ["Tokio, Japón"]
+
+Responde SOLO con el array JSON, sin texto adicional."""
+
+        # Inicializar el modelo de Gemini
+        GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        
+        # Validar que solo se usen modelos gratuitos (Flash)
+        model_lower = GEMINI_MODEL.lower()
+        is_free_model = (
+            "flash" in model_lower or 
+            model_lower == "gemini-pro-latest" or
+            model_lower == "models/gemini-pro-latest"
+        )
+        
+        if not is_free_model:
+            raise HTTPException(
+                status_code=400,
+                detail=f"❌ Modelo '{GEMINI_MODEL}' NO permitido. Solo se permiten modelos GRATUITOS de Gemini."
+            )
+        
+        model = genai.GenerativeModel(GEMINI_MODEL)
+        
+        # Generar la respuesta
+        response = model.generate_content(prompt)
+        
+        # Extraer el texto de la respuesta
+        if not response:
+            return DestinationsResponse(destinations=[])
+        
+        response_text = None
+        if hasattr(response, 'text') and response.text:
+            response_text = response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            if len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    parts = candidate.content.parts
+                    if parts and len(parts) > 0:
+                        response_text = parts[0].text if hasattr(parts[0], 'text') else str(parts[0])
+        
+        if not response_text:
+            return DestinationsResponse(destinations=[])
+        
+        # Limpiar la respuesta para extraer solo el JSON
+        response_text = response_text.strip()
+        
+        # Intentar extraer el JSON de la respuesta
+        import json
+        import re
+        
+        # Buscar un array JSON en la respuesta
+        json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(0)
+            try:
+                destinations = json.loads(json_str)
+                # Validar que sea una lista
+                if isinstance(destinations, list):
+                    # Limitar a 5 destinos
+                    destinations = destinations[:5]
+                    return DestinationsResponse(destinations=destinations)
+            except json.JSONDecodeError:
+                pass
+        
+        # Si no se pudo parsear, intentar parsear toda la respuesta como JSON
+        try:
+            destinations = json.loads(response_text)
+            if isinstance(destinations, list):
+                destinations = destinations[:5]
+                return DestinationsResponse(destinations=destinations)
+        except json.JSONDecodeError:
+            pass
+        
+        # Si falla todo, devolver lista vacía
+        return DestinationsResponse(destinations=[])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_type = type(e).__name__
+        error_message = str(e) if str(e) else "Error desconocido"
+        full_error = f"Error al buscar destinos ({error_type}): {error_message}"
+        print(f"Error completo: {full_error}")
+        import traceback
+        traceback.print_exc()
+        # En caso de error, devolver lista vacía
+        return DestinationsResponse(destinations=[])
 
 
 @app.get("/api/health")

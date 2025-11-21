@@ -1,31 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
-// Lista de destinos populares
-const POPULAR_DESTINATIONS = [
-  'París, Francia', 'Tokio, Japón', 'Nueva York, Estados Unidos', 'Londres, Reino Unido',
-  'Roma, Italia', 'Barcelona, España', 'Bali, Indonesia', 'Dubái, Emiratos Árabes',
-  'Singapur', 'Bangkok, Tailandia', 'Amsterdam, Países Bajos', 'Praga, República Checa',
-  'Viena, Austria', 'Berlín, Alemania', 'Madrid, España', 'Atenas, Grecia',
-  'Estambul, Turquía', 'El Cairo, Egipto', 'Marrakech, Marruecos', 'Sídney, Australia',
-  'Melbourne, Australia', 'Auckland, Nueva Zelanda', 'Río de Janeiro, Brasil',
-  'Buenos Aires, Argentina', 'Ciudad de México, México', 'Lima, Perú', 'Santiago, Chile',
-  'Bogotá, Colombia', 'Cartagena, Colombia', 'Cancún, México', 'Playa del Carmen, México',
-  'San José, Costa Rica', 'Quito, Ecuador', 'La Paz, Bolivia', 'Montevideo, Uruguay',
-  'Lisboa, Portugal', 'Dublín, Irlanda', 'Edimburgo, Escocia', 'Copenhague, Dinamarca',
-  'Estocolmo, Suecia', 'Oslo, Noruega', 'Helsinki, Finlandia', 'Reikiavik, Islandia',
-  'Moscú, Rusia', 'San Petersburgo, Rusia', 'Pekín, China', 'Shanghái, China',
-  'Hong Kong, China', 'Seúl, Corea del Sur', 'Taipei, Taiwán', 'Kuala Lumpur, Malasia',
-  'Yakarta, Indonesia', 'Manila, Filipinas', 'Ho Chi Minh, Vietnam', 'Hanoi, Vietnam',
-  'Nueva Delhi, India', 'Mumbai, India', 'Agra, India', 'Kathmandú, Nepal',
-  'Katmandú, Nepal', 'Colombo, Sri Lanka', 'Doha, Catar', 'Abu Dabi, Emiratos Árabes',
-  'Tel Aviv, Israel', 'Jerusalén, Israel', 'Beirut, Líbano', 'Amán, Jordania',
-  'Ciudad del Cabo, Sudáfrica', 'Johannesburgo, Sudáfrica', 'Nairobi, Kenia',
-  'Casablanca, Marruecos', 'Túnez, Túnez', 'Tánger, Marruecos', 'Fez, Marruecos'
-];
 
 function App() {
   const [showForm, setShowForm] = useState(true);
@@ -40,8 +17,12 @@ function App() {
     preference: ''
   });
   const [destinationSuggestions, setDestinationSuggestions] = useState([]);
+  const [popularDestinations, setPopularDestinations] = useState([]);
+  const [loadingDestinations, setLoadingDestinations] = useState(false);
+  const [loadingSearch, setLoadingSearch] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [destinationError, setDestinationError] = useState('');
+  const searchTimeoutRef = useRef(null);
   const [tripType, setTripType] = useState('closed'); // 'closed' o 'open'
   const [showDateModal, setShowDateModal] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -54,6 +35,15 @@ function App() {
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Limpiar timeout al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const calculateDays = (departure, returnDate) => {
     if (!departure || !returnDate) return 0;
@@ -427,6 +417,59 @@ function App() {
     setShowTravelersModal(false);
   };
 
+  const loadPopularDestinations = async () => {
+    // Si ya tenemos destinos populares cargados, no volver a cargar
+    if (popularDestinations.length > 0) {
+      return popularDestinations;
+    }
+
+    setLoadingDestinations(true);
+    try {
+      const result = await axios.get(`${API_URL}/api/destinations/popular`);
+      if (result.data && result.data.destinations) {
+        setPopularDestinations(result.data.destinations);
+        return result.data.destinations;
+      }
+    } catch (error) {
+      console.error('Error al cargar destinos populares:', error);
+      // En caso de error, usar destinos por defecto
+      const defaultDestinations = [
+        'París, Francia',
+        'Tokio, Japón',
+        'Nueva York, Estados Unidos',
+        'Bali, Indonesia',
+        'Barcelona, España'
+      ];
+      setPopularDestinations(defaultDestinations);
+      return defaultDestinations;
+    } finally {
+      setLoadingDestinations(false);
+    }
+    return [];
+  };
+
+  const searchDestinations = async (query) => {
+    if (!query || !query.trim()) {
+      return [];
+    }
+
+    setLoadingSearch(true);
+    try {
+      const result = await axios.post(`${API_URL}/api/destinations/search`, {
+        query: query.trim()
+      });
+      if (result.data && result.data.destinations) {
+        return result.data.destinations;
+      }
+    } catch (error) {
+      console.error('Error al buscar destinos:', error);
+      return [];
+    } finally {
+      setLoadingSearch(false);
+    }
+    return [];
+  };
+
   const handleFormSubmit = (e) => {
     e.preventDefault();
     
@@ -491,15 +534,52 @@ function App() {
     // Lógica de autocompletado para destino
     if (name === 'destination') {
       setDestinationError('');
+      
+      // Limpiar timeout anterior si existe
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      
       if (value.trim().length > 0) {
-        const filtered = POPULAR_DESTINATIONS.filter(dest =>
+        // Primero, filtrar destinos populares que coincidan (búsqueda rápida local)
+        const filteredPopular = popularDestinations.filter(dest =>
           dest.toLowerCase().includes(value.toLowerCase())
-        ).slice(0, 5);
-        setDestinationSuggestions(filtered);
-        setShowSuggestions(true);
+        );
+        
+        // Si hay coincidencias en destinos populares, mostrarlas inmediatamente
+        if (filteredPopular.length > 0) {
+          setDestinationSuggestions(filteredPopular.slice(0, 5));
+          setShowSuggestions(true);
+        }
+        
+        // Luego, buscar con Gemini usando debounce (500ms)
+        searchTimeoutRef.current = setTimeout(async () => {
+          const searchResults = await searchDestinations(value);
+          if (searchResults.length > 0) {
+            // Combinar resultados de búsqueda con destinos populares filtrados
+            const combined = [...new Set([...filteredPopular, ...searchResults])].slice(0, 5);
+            setDestinationSuggestions(combined);
+            setShowSuggestions(true);
+          } else if (filteredPopular.length === 0) {
+            // Si no hay resultados de ninguna fuente, ocultar sugerencias
+            setDestinationSuggestions([]);
+            setShowSuggestions(false);
+          }
+        }, 500);
       } else {
-        setDestinationSuggestions([]);
-        setShowSuggestions(false);
+        // Si no hay texto, mostrar los destinos populares (si están cargados)
+        if (popularDestinations.length > 0) {
+          setDestinationSuggestions(popularDestinations.slice(0, 5));
+          setShowSuggestions(true);
+        } else {
+          // Si no hay destinos cargados, cargarlos
+          loadPopularDestinations().then(destinations => {
+            if (destinations.length > 0) {
+              setDestinationSuggestions(destinations.slice(0, 5));
+              setShowSuggestions(true);
+            }
+          });
+        }
       }
     }
   };
@@ -603,9 +683,38 @@ function App() {
                     value={formData.destination}
                     onChange={handleInputChange}
                     onBlur={handleDestinationBlur}
-                    onFocus={() => {
-                      if (formData.destination && destinationSuggestions.length > 0) {
-                        setShowSuggestions(true);
+                    onFocus={async () => {
+                      // Cargar destinos populares si no están cargados
+                      const destinations = await loadPopularDestinations();
+                      
+                      // Si hay texto, buscar con Gemini y mostrar sugerencias
+                      if (formData.destination.trim().length > 0) {
+                        // Filtrar destinos populares primero
+                        const filtered = destinations.filter(dest =>
+                          dest.toLowerCase().includes(formData.destination.toLowerCase())
+                        );
+                        
+                        if (filtered.length > 0) {
+                          setDestinationSuggestions(filtered.slice(0, 5));
+                          setShowSuggestions(true);
+                        }
+                        
+                        // Buscar con Gemini
+                        const searchResults = await searchDestinations(formData.destination);
+                        if (searchResults.length > 0) {
+                          const combined = [...new Set([...filtered, ...searchResults])].slice(0, 5);
+                          setDestinationSuggestions(combined);
+                          setShowSuggestions(true);
+                        } else if (filtered.length > 0) {
+                          setDestinationSuggestions(filtered.slice(0, 5));
+                          setShowSuggestions(true);
+                        }
+                      } else {
+                        // Si no hay texto, mostrar los destinos populares
+                        if (destinations.length > 0) {
+                          setDestinationSuggestions(destinations.slice(0, 5));
+                          setShowSuggestions(true);
+                        }
                       }
                     }}
                     autoComplete="off"

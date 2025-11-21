@@ -20,28 +20,45 @@ npm install
 
 ## 🚀 Iniciar el Proyecto
 
-### 1. Configurar API Key
+### 1. Configurar API Key (Solo Primera Vez)
 
-**Linux/Mac:**
+**Configuración Permanente (Recomendado):**
+
+**Linux/Mac (zsh):**
 ```bash
-export GEMINI_API_KEY=tu_api_key_aqui
+echo 'export GEMINI_API_KEY=tu_api_key_aqui' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Linux/Mac (bash):**
+```bash
+echo 'export GEMINI_API_KEY=tu_api_key_aqui' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 **Windows (PowerShell):**
 ```powershell
-$env:GEMINI_API_KEY="tu_api_key_aqui"
+[System.Environment]::SetEnvironmentVariable('GEMINI_API_KEY', 'tu_api_key_aqui', 'User')
 ```
 
-**Windows (CMD):**
-```cmd
-set GEMINI_API_KEY=tu_api_key_aqui
+**Configuración Temporal (Solo esta sesión):**
+```bash
+export GEMINI_API_KEY=tu_api_key_aqui  # Linux/Mac
 ```
 
 ### 2. Iniciar Backend (Terminal 1)
+
+**Opción A: Usando el script de inicio (Recomendado)**
+```bash
+cd backend
+./start_backend.sh
+```
+
+**Opción B: Manual**
 ```bash
 cd backend
 source venv/bin/activate        # Windows: venv\Scripts\activate
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 3. Iniciar Frontend (Terminal 2)
