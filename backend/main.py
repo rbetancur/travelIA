@@ -4,7 +4,42 @@ from pydantic import BaseModel
 from typing import Optional
 import google.generativeai as genai
 import os
-from toon_parser import parse_destinations_toon
+from prompts import load_prompt
+
+
+def parse_destinations_simple(response_text: str) -> list[str]:
+    """
+    Parsea una lista simple de destinos desde la respuesta de Gemini.
+    Extrae líneas que contienen destinos en formato "Ciudad, País".
+    
+    Args:
+        response_text: Texto de respuesta de Gemini
+        
+    Returns:
+        Lista de destinos parseados
+    """
+    if not response_text:
+        return []
+    
+    destinations = []
+    lines = response_text.strip().split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        # Filtrar líneas vacías, comentarios y explicaciones
+        if not line or line.startswith('#') or line.startswith('//'):
+            continue
+        # Filtrar líneas que parecen explicaciones (muy cortas o con puntuación final)
+        if len(line) < 3 or (line.endswith('.') and len(line) < 20):
+            continue
+        # Filtrar líneas que contienen palabras clave de explicación
+        if any(word in line.lower() for word in ['ejemplo', 'formato', 'instrucción', 'responde']):
+            continue
+        # Si la línea contiene una coma (formato "Ciudad, País"), agregarla
+        if ',' in line:
+            destinations.append(line)
+    
+    return destinations
 
 app = FastAPI(title="ViajeIA API")
 
@@ -70,21 +105,8 @@ async def plan_travel(query: TravelQuery):
                 detail="API key de Gemini no configurada. Por favor, configura la variable de entorno GEMINI_API_KEY. Ver SECRETS.md para instrucciones."
             )
         
-        # Crear el prompt para Gemini enfocado en viajes con personalidad de Alex
-        prompt = f"""Eres Alex, un consultor personal de viajes entusiasta y amigable. 
-
-INSTRUCCIONES DE PERSONALIDAD:
-- Preséntate siempre como "Alex, tu consultor personal de viajes" 🧳✈️
-- Mantén un tono entusiasta, amigable y profesional
-- Haz preguntas inteligentes para conocer mejor las preferencias del usuario (presupuesto, tipo de viaje, intereses, fechas, etc.)
-- Organiza tus respuestas con bullets (•) o listas numeradas para mayor claridad
-- Incluye emojis de viajes relevantes en tus respuestas (✈️🧳🌍🏖️🗺️🏨🍽️🎒📸🌴🏛️ etc.)
-- Sé proactivo sugiriendo opciones y alternativas
-- Muestra entusiasmo genuino por ayudar a planificar el viaje perfecto
-
-Pregunta del usuario: {query.question}
-
-Responde como Alex, haciendo preguntas relevantes si necesitas más información y proporcionando una respuesta estructurada y entusiasta."""
+        # Cargar prompt optimizado en formato TOON desde archivo
+        prompt = load_prompt("travel_planning", question=query.question)
 
         # Inicializar el modelo de Gemini
         # IMPORTANTE: Solo usamos modelos GRATUITOS de Gemini (modelos Flash)
@@ -181,28 +203,8 @@ async def get_popular_destinations():
                 detail="API key de Gemini no configurada. Por favor, configura la variable de entorno GEMINI_API_KEY. Ver SECRETS.md para instrucciones."
             )
         
-        # Crear el prompt para Gemini para obtener destinos populares usando TOON
-        prompt = """Eres un experto en viajes y turismo. 
-
-Tu tarea es proporcionar una lista de exactamente 5 destinos turísticos populares y recomendados en formato TOON.
-
-IMPORTANTE - FORMATO TOON REQUERIDO:
-- Usa formato TOON (Token-Oriented Object Notation), NO uses JSON
-- Formato TOON: una línea por destino, sin comillas, corchetes ni comas
-- Cada destino debe incluir el nombre de la ciudad y el país (ejemplo: "París, Francia")
-- Los destinos deben ser diversos geográficamente (diferentes continentes)
-- Incluye destinos populares y reconocidos mundialmente
-- NO incluyas explicaciones, numeración, ni texto adicional
-- Responde SOLO con los 5 destinos, uno por línea
-
-Ejemplo de formato TOON esperado:
-París, Francia
-Tokio, Japón
-Nueva York, Estados Unidos
-Bali, Indonesia
-Barcelona, España
-
-Responde SOLO con los 5 destinos en formato TOON, sin texto adicional."""
+        # Cargar prompt optimizado en formato TOON desde archivo
+        prompt = load_prompt("popular_destinations")
 
         # Inicializar el modelo de Gemini
         GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -250,15 +252,15 @@ Responde SOLO con los 5 destinos en formato TOON, sin texto adicional."""
                 detail="La respuesta de Gemini está vacía o en formato inesperado"
             )
         
-        # Parsear respuesta TOON usando el parser especializado
-        destinations = parse_destinations_toon(response_text)
+        # Parsear respuesta usando parser simple
+        destinations = parse_destinations_simple(response_text)
         
         # Validar y limitar a 5 destinos
         if destinations and len(destinations) > 0:
             destinations = destinations[:5]
             return DestinationsResponse(destinations=destinations)
         
-        # Si falla el parseo TOON, devolver destinos por defecto
+        # Si falla el parseo, devolver destinos por defecto
         default_destinations = [
             "París, Francia",
             "Tokio, Japón",
@@ -307,29 +309,8 @@ async def search_destinations(search_query: DestinationSearchQuery):
         
         query = search_query.query.strip()
         
-        # Crear el prompt para Gemini para buscar destinos usando TOON
-        prompt = f"""Eres un experto en viajes y turismo. 
-
-El usuario está escribiendo: "{query}"
-
-Tu tarea es sugerir destinos turísticos que coincidan con lo que el usuario está escribiendo.
-
-IMPORTANTE - FORMATO TOON REQUERIDO:
-- Usa formato TOON (Token-Oriented Object Notation), NO uses JSON
-- Formato TOON: una línea por destino, sin comillas, corchetes ni comas
-- Devuelve máximo 5 destinos que coincidan con "{query}"
-- Cada destino debe incluir el nombre de la ciudad y el país (ejemplo: "Aruba, Aruba" o "Auckland, Nueva Zelanda")
-- Si "{query}" es parte de un nombre de ciudad o país, sugiere destinos que contengan ese texto
-- Los destinos deben ser reales y reconocidos
-- NO incluyas explicaciones, numeración, ni texto adicional
-- Si no encuentras destinos relevantes, no devuelvas nada (respuesta vacía)
-
-Ejemplos de formato TOON:
-- Si el usuario escribe "aru", responde: Aruba, Aruba
-- Si el usuario escribe "barc", responde: Barcelona, España
-- Si el usuario escribe "tok", responde: Tokio, Japón
-
-Responde SOLO con los destinos en formato TOON, uno por línea, sin texto adicional."""
+        # Cargar prompt optimizado en formato TOON desde archivo
+        prompt = load_prompt("search_destinations", query=query)
 
         # Inicializar el modelo de Gemini
         GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -371,8 +352,8 @@ Responde SOLO con los destinos en formato TOON, uno por línea, sin texto adicio
         if not response_text:
             return DestinationsResponse(destinations=[])
         
-        # Parsear respuesta TOON usando el parser especializado
-        destinations = parse_destinations_toon(response_text)
+        # Parsear respuesta usando parser simple
+        destinations = parse_destinations_simple(response_text)
         
         # Validar y limitar a 5 destinos
         if destinations and len(destinations) > 0:

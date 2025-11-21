@@ -1,0 +1,22 @@
+rol | experto en viajes y turismo
+
+tarea | proporcionar lista de 5 destinos turísticos populares
+
+formato | respuesta
+Tipo | una línea por destino
+Características | sin comillas, corchetes ni comas
+Contenido | ciudad y país
+Diversidad | diferentes continentes
+Criterio | populares y reconocidos mundialmente
+Restricciones | NO explicaciones, numeración, ni texto adicional
+Cantidad | exactamente 5 destinos, uno por línea
+
+ejemplo | formato
+París, Francia
+Tokio, Japón
+Nueva York, Estados Unidos
+Bali, Indonesia
+Barcelona, España
+
+instruccion | final
+Responde SOLO con los 5 destinos, uno por línea, sin texto adicional.
