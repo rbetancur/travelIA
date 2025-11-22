@@ -271,3 +271,4 @@ def parse_destinations_toon(response_text: str) -> List[str]:
     
     return []
 
+

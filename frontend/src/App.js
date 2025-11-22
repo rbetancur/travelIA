@@ -19,7 +19,11 @@ import {
   ChevronRight, 
   ChevronLeft, 
   Minus, 
-  Plus 
+  Plus,
+  Hotel,
+  UtensilsCrossed,
+  Lightbulb,
+  DollarSign
 } from 'lucide-react';
 import './App.css';
 
@@ -58,6 +62,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [carouselDirection, setCarouselDirection] = useState('right');
+  const contentScrollRef = useRef(null);
+  const lastFormDataRef = useRef(null);
+  const lastTripTypeRef = useRef(null);
 
   // Limpiar timeout al desmontar el componente
   useEffect(() => {
@@ -67,6 +74,77 @@ function App() {
       }
     };
   }, []);
+
+  // Función para actualizar indicadores de scroll
+  const updateScrollIndicators = (element) => {
+    if (!element) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = element;
+    const isScrollable = scrollHeight > clientHeight;
+    
+    if (isScrollable) {
+      if (scrollTop > 10) {
+        element.classList.add('scrollable-top');
+      } else {
+        element.classList.remove('scrollable-top');
+      }
+      
+      if (scrollTop < scrollHeight - clientHeight - 10) {
+        element.classList.add('scrollable-bottom');
+      } else {
+        element.classList.remove('scrollable-bottom');
+      }
+    } else {
+      element.classList.remove('scrollable-top', 'scrollable-bottom');
+    }
+  };
+
+  // Resetear índice del carrusel cuando cambia la respuesta
+  useEffect(() => {
+    if (response) {
+      const parsed = parseResponseSections(response);
+      if (parsed && parsed.sections) {
+        const sectionKeys = Object.keys(parsed.sections);
+        if (sectionKeys.length > 0) {
+          // Asegurar que el índice esté dentro del rango válido
+          if (carouselIndex >= sectionKeys.length) {
+            setCarouselIndex(0);
+          }
+        } else {
+          // Si no hay secciones, resetear el índice
+          setCarouselIndex(0);
+        }
+      } else {
+        // Si no se pueden parsear secciones, resetear el índice
+        setCarouselIndex(0);
+      }
+    }
+  }, [response]);
+
+  // Actualizar indicadores de scroll cuando cambia el contenido o el índice
+  useEffect(() => {
+    if (contentScrollRef.current) {
+      // Pequeño delay para asegurar que el DOM se haya actualizado
+      setTimeout(() => {
+        updateScrollIndicators(contentScrollRef.current);
+      }, 100);
+      
+      const handleScroll = () => {
+        updateScrollIndicators(contentScrollRef.current);
+      };
+      
+      const element = contentScrollRef.current;
+      element.addEventListener('scroll', handleScroll);
+      
+      // También verificar al cambiar el tamaño de la ventana
+      window.addEventListener('resize', handleScroll);
+      
+      return () => {
+        element.removeEventListener('scroll', handleScroll);
+        window.removeEventListener('resize', handleScroll);
+      };
+    }
+  }, [response, carouselIndex]);
 
   // Manejar navegación del carrusel con teclado
   useEffect(() => {
@@ -524,7 +602,7 @@ function App() {
     return [];
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     
     if (!validateDestination(formData.destination)) {
@@ -548,8 +626,6 @@ function App() {
     const days = tripType === 'closed' ? calculateDays(formData.departureDate, formData.returnDate) : null;
     const travelersInfo = `Viajamos ${formData.adults} ${formData.adults === 1 ? 'adulto' : 'adultos'}${formData.children > 0 ? `, ${formData.children} ${formData.children === 1 ? 'niño' : 'niños'}` : ''}${formData.infants > 0 ? ` y ${formData.infants} ${formData.infants === 1 ? 'bebé' : 'bebés'}` : ''}`;
     
-    setShowForm(false);
-    
     // Pre-llenar la pregunta con la información del formulario
     let preFilledQuestion;
     if (tripType === 'closed') {
@@ -557,7 +633,65 @@ function App() {
     } else {
       preFilledQuestion = `Quiero viajar a ${formData.destination} desde el ${formData.departureDate} (viaje abierto, sin fecha de regreso definida) con un presupuesto de ${formData.budget}. ${travelersInfo}. Prefiero ${formData.preference}.`;
     }
+    
+    // Crear un objeto con los datos del formulario para comparar
+    const currentFormData = {
+      destination: formData.destination,
+      departureDate: formData.departureDate,
+      returnDate: formData.returnDate,
+      adults: formData.adults,
+      children: formData.children,
+      infants: formData.infants,
+      budget: formData.budget,
+      preference: formData.preference,
+      tripType: tripType
+    };
+    
+    // Comparar con los datos anteriores
+    const hasChanged = !lastFormDataRef.current || 
+      JSON.stringify(currentFormData) !== JSON.stringify(lastFormDataRef.current) ||
+      tripType !== lastTripTypeRef.current;
+    
     setQuestion(preFilledQuestion);
+    setShowForm(false);
+    
+    // Si no hay cambios y ya existe una respuesta, conservarla
+    if (!hasChanged && response && response.trim().length > 0) {
+      // No hacer petición, solo mostrar la respuesta existente
+      return;
+    }
+    
+    // Si hay cambios o no hay respuesta previa, hacer la petición
+    setLoading(true);
+    setResponse('');
+    setCarouselIndex(0);
+    
+    // Guardar los datos actuales para la próxima comparación
+    lastFormDataRef.current = currentFormData;
+    lastTripTypeRef.current = tripType;
+
+    try {
+      const result = await axios.post(`${API_URL}/api/travel`, {
+        question: preFilledQuestion.trim(),
+      });
+
+      setResponse(result.data.answer);
+    } catch (error) {
+      console.error('Error:', error);
+      let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
+      
+      if (error.response) {
+        // El servidor respondió con un código de error
+        errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        // La solicitud se hizo pero no se recibió respuesta
+        errorMessage = 'No se pudo conectar con el servidor. Por favor, verifica que el backend esté corriendo.';
+      }
+      
+      setResponse(`Error: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -674,10 +808,314 @@ function App() {
     }, 200);
   };
 
+  // Función para renderizar contenido de secciones con formato mejorado
+  // El backend envía contenido en formato JSON, cada elemento del array es una recomendación
+  const renderSectionContent = (content, sectionName) => {
+    if (!content) {
+      console.warn(`⚠️ Contenido vacío para sección: ${sectionName}`);
+      return <div className="empty-section">No hay contenido disponible para esta sección.</div>;
+    }
+    
+    // Dividir por líneas - cada línea es una recomendación del array JSON
+    const allLines = content.split('\n');
+    const lines = allLines.filter(line => line.trim());
+    
+    console.log(`📋 Renderizando sección "${sectionName}":`);
+    console.log(`  - Total recomendaciones recibidas: ${lines.length}`);
+    console.log(`  - Contenido completo:`, content);
+    
+    if (lines.length === 0) {
+      console.warn(`⚠️ No hay recomendaciones para sección: ${sectionName}`);
+      return <div className="empty-section">No hay recomendaciones disponibles para esta sección.</div>;
+    }
+    
+    return (
+      <div className="section-recommendations">
+        {lines.map((line, index) => {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) return null;
+          
+          console.log(`  ✓ Renderizando recomendación ${index + 1}: "${trimmedLine.substring(0, 50)}..."`);
+          
+          // Detectar si tiene formato "Subtítulo: descripción" o "Título - descripción"
+          // Mejorar regex para capturar diferentes formatos comunes
+          // Primero intentar con dos puntos (más específico)
+          const subtitleMatch = trimmedLine.match(/^([^:]+?):\s+(.+)$/);
+          
+          if (subtitleMatch) {
+            // Formato con subtítulo (ej: "Transporte: usar metro")
+            const subtitle = subtitleMatch[1].trim();
+            const description = subtitleMatch[2].trim();
+            
+            // Validar que el subtítulo no sea muy largo (probablemente no es un subtítulo)
+            if (subtitle.length > 50) {
+              // Probablemente no es un subtítulo, intentar con guión
+              const dashMatch = trimmedLine.match(/^([^-]+?)\s*-\s*(.+)$/);
+              if (dashMatch) {
+                const title = dashMatch[1].trim();
+                const desc = dashMatch[2].trim();
+                return (
+                  <div key={index} className="recommendation-item">
+                    <div className="recommendation-bullet">•</div>
+                    <div className="recommendation-content">
+                      <strong className="recommendation-subtitle">{title}</strong>
+                      <span className="recommendation-description"> - {desc}</span>
+                    </div>
+                  </div>
+                );
+              }
+              // Si no coincide con guión, mostrar como texto normal
+              return (
+                <div key={index} className="recommendation-item">
+                  <div className="recommendation-bullet">•</div>
+                  <div className="recommendation-content">
+                    {trimmedLine}
+                  </div>
+                </div>
+              );
+            }
+            
+            return (
+              <div key={index} className="recommendation-item">
+                <div className="recommendation-bullet">•</div>
+                <div className="recommendation-content">
+                  <strong className="recommendation-subtitle">{subtitle}:</strong>
+                  <span className="recommendation-description"> {description}</span>
+                </div>
+              </div>
+            );
+          }
+          
+          // Intentar formato con guión (debe tener al menos un espacio antes y después del guión)
+          const dashMatch = trimmedLine.match(/^(.+?)\s+-\s+(.+)$/);
+          if (dashMatch) {
+            const title = dashMatch[1].trim();
+            const description = dashMatch[2].trim();
+            
+            // Validar que el título no sea muy largo (probablemente no es un título)
+            if (title.length > 80) {
+              // Probablemente no es un título, mostrar como texto normal
+              return (
+                <div key={index} className="recommendation-item">
+                  <div className="recommendation-bullet">•</div>
+                  <div className="recommendation-content">
+                    {trimmedLine}
+                  </div>
+                </div>
+              );
+            }
+            
+            return (
+              <div key={index} className="recommendation-item">
+                <div className="recommendation-bullet">•</div>
+                <div className="recommendation-content">
+                  <strong className="recommendation-subtitle">{title}</strong>
+                  <span className="recommendation-description"> - {description}</span>
+                </div>
+              </div>
+            );
+          }
+          
+          // Formato simple - mostrar toda la recomendación
+          return (
+            <div key={index} className="recommendation-item">
+              <div className="recommendation-bullet">•</div>
+              <div className="recommendation-content">
+                {trimmedLine}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Función para renderizar texto introductorio/final (sin viñetas)
+  const renderPlainText = (text) => {
+    if (!text) return null;
+    
+    const lines = text.split('\n');
+    return lines.map((line, index) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return <br key={index} />;
+      
+      // Procesar markdown básico si existe
+      const parts = [];
+      let lastIndex = 0;
+      const boldRegex = /\*\*([^*]+)\*\*/g;
+      let match;
+      let key = 0;
+      
+      while ((match = boldRegex.exec(trimmedLine)) !== null) {
+        if (match.index > lastIndex) {
+          parts.push(
+            <span key={`text-${key++}`}>
+              {trimmedLine.substring(lastIndex, match.index)}
+            </span>
+          );
+        }
+        parts.push(
+          <strong key={`bold-${key++}`}>
+            {match[1]}
+          </strong>
+        );
+        lastIndex = match.index + match[0].length;
+      }
+      
+      if (lastIndex < trimmedLine.length) {
+        parts.push(
+          <span key={`text-${key++}`}>
+            {trimmedLine.substring(lastIndex)}
+          </span>
+        );
+      }
+      
+      if (parts.length === 0) {
+        parts.push(<span key="text-0">{trimmedLine}</span>);
+      }
+      
+      return (
+        <p key={index} style={{ marginBottom: '12px', lineHeight: '1.8' }}>
+          {parts}
+        </p>
+      );
+    });
+  };
+
+  // Función para limpiar texto técnico innecesario
+  const cleanText = (text) => {
+    if (!text) return '';
+    
+    // Eliminar bloques de código markdown (```json, ```, etc.)
+    let cleaned = text
+      .replace(/```[\s\S]*?```/g, '') // Eliminar bloques de código completos
+      .replace(/```json\s*/gi, '') // Eliminar inicio de bloque json
+      .replace(/```\s*/g, '') // Eliminar cierres de bloque
+      .replace(/^\s*json\s*$/gmi, '') // Eliminar líneas que solo dicen "json"
+      .trim();
+    
+    // Eliminar líneas que solo contienen caracteres técnicos o están vacías
+    const lines = cleaned.split('\n')
+      .map(line => line.trim())
+      .filter(line => {
+        // Filtrar líneas vacías o que solo contienen caracteres técnicos
+        if (!line) return false;
+        // Eliminar líneas que son solo símbolos técnicos
+        if (/^[`{}[\],:;]+$/.test(line)) return false;
+        // Eliminar líneas que empiezan con caracteres técnicos comunes
+        if (/^[`{}\]\[,;:]/.test(line) && line.length < 10) return false;
+        return true;
+      });
+    
+    cleaned = lines.join('\n').trim();
+    
+    // Si después de limpiar no queda nada útil, retornar vacío
+    if (!cleaned || cleaned.length < 3) return '';
+    
+    return cleaned;
+  };
+
   // Función para parsear las secciones de la respuesta
+  // El backend ahora genera respuestas en formato JSON estructurado
   const parseResponseSections = (responseText) => {
     if (!responseText) return null;
 
+    // Mapeo de nombres de secciones en JSON a nombres para mostrar
+    const sectionMapping = {
+      'alojamiento': 'ALOJAMIENTO',
+      'comida_local': 'COMIDA LOCAL',
+      'lugares_imperdibles': 'LUGARES IMPERDIBLES',
+      'consejos_locales': 'CONSEJOS LOCALES',
+      'estimacion_costos': 'ESTIMACIÓN DE COSTOS'
+    };
+
+    // Intentar extraer JSON de la respuesta
+    let jsonData = null;
+    let beforeText = '';
+    let afterText = '';
+
+    // Buscar JSON en la respuesta (puede venir con texto antes/después)
+    try {
+      // Intentar encontrar un bloque JSON
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[0];
+        jsonData = JSON.parse(jsonStr);
+        
+        // Extraer texto antes y después del JSON
+        const jsonIndex = responseText.indexOf(jsonStr);
+        if (jsonIndex > 0) {
+          beforeText = cleanText(responseText.substring(0, jsonIndex));
+        }
+        const afterIndex = jsonIndex + jsonStr.length;
+        if (afterIndex < responseText.length) {
+          afterText = cleanText(responseText.substring(afterIndex));
+        }
+      } else {
+        // Si no hay JSON explícito, intentar parsear toda la respuesta como JSON
+        jsonData = JSON.parse(responseText);
+      }
+    } catch (error) {
+      // Si no es JSON válido, intentar parseo legacy (formato TOON)
+      console.warn('No se pudo parsear como JSON, intentando formato legacy:', error);
+      return parseResponseSectionsLegacy(responseText);
+    }
+
+    // Validar que jsonData sea un objeto con las secciones esperadas
+    if (!jsonData || typeof jsonData !== 'object') {
+      console.warn('JSON parseado no es un objeto válido');
+      return parseResponseSectionsLegacy(responseText);
+    }
+
+    // Convertir las secciones del JSON al formato esperado
+    const sections = {};
+    let hasSections = false;
+
+    for (const [jsonKey, displayName] of Object.entries(sectionMapping)) {
+      if (jsonData[jsonKey] && Array.isArray(jsonData[jsonKey])) {
+        // Convertir array a string con saltos de línea
+        sections[displayName] = jsonData[jsonKey]
+          .filter(item => item && typeof item === 'string' && item.trim())
+          .join('\n');
+        hasSections = true;
+      }
+    }
+
+    // Si no encontramos secciones válidas, intentar formato legacy
+    if (!hasSections) {
+      console.warn('No se encontraron secciones válidas en el JSON');
+      return parseResponseSectionsLegacy(responseText);
+    }
+
+    console.log('=== PARSING RESULT (JSON) ===');
+    console.log('Secciones detectadas:', Object.keys(sections));
+    
+    // Log detallado por sección
+    Object.keys(sections).forEach(section => {
+      const content = sections[section];
+      const contentLines = content.split('\n');
+      const nonEmptyLines = contentLines.filter(l => l.trim());
+      console.log(`\n${section}:`);
+      console.log(`  - Total recomendaciones: ${nonEmptyLines.length}`);
+      console.log(`  - Primeras 3 recomendaciones:`, nonEmptyLines.slice(0, 3));
+    });
+    
+    if (beforeText) {
+      console.log('\nTexto antes de JSON:', beforeText);
+    }
+    if (afterText) {
+      console.log('\nTexto después de JSON:', afterText);
+    }
+
+    return {
+      sections: sections,
+      beforeText: beforeText,
+      afterText: afterText
+    };
+  };
+
+  // Función de respaldo para parsear formato TOON legacy (por si acaso)
+  const parseResponseSectionsLegacy = (responseText) => {
     const sections = {};
     const sectionNames = [
       'ALOJAMIENTO',
@@ -693,61 +1131,62 @@ function App() {
     let beforeText = [];
     let afterText = [];
     let firstSectionIndex = -1;
-    let lastSectionIndex = -1;
+    let inSections = false;
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
       const trimmedLine = line.trim();
+      
       if (!trimmedLine) {
-        // Si hay una sección activa, agregar línea vacía al contenido
         if (currentSection) {
           currentContent.push('');
-        } else if (firstSectionIndex === -1) {
-          // Antes de la primera sección
+        } else if (!inSections) {
           beforeText.push(line);
         } else {
-          // Después de la última sección
           afterText.push(line);
         }
         continue;
       }
 
-      // Verificar si la línea es un encabezado de sección
-      let isSectionHeader = false;
-      let matchedSectionName = null;
+      let foundSection = false;
       
       for (const sectionName of sectionNames) {
         const upperLine = trimmedLine.toUpperCase();
-        // Buscar patrones como "ALOJAMIENTO |", "ALOJAMIENTO:", "ALOJAMIENTO" al inicio de línea
-        if (upperLine.startsWith(sectionName)) {
-          // Verificar que después del nombre haya un separador o fin de línea
-          const remaining = upperLine.substring(sectionName.length).trim();
-          if (remaining === '' || remaining.startsWith('|') || remaining.startsWith(':')) {
-            // Guardar la sección anterior si existe
+        const normalizedSectionName = sectionName.replace(/\s+/g, ' ');
+        const normalizedLine = upperLine.replace(/\s+/g, ' ');
+        
+        if (normalizedLine.startsWith(normalizedSectionName)) {
+          const afterName = normalizedLine.substring(normalizedSectionName.length).trim();
+          const hasSeparator = afterName === '' || 
+                              afterName.startsWith('|') || 
+                              afterName.startsWith(':') ||
+                              /^\([^)]+\)\s*[|:]/.test(afterName);
+          
+          if (hasSeparator) {
             if (currentSection) {
               sections[currentSection] = currentContent.join('\n').trim();
-              lastSectionIndex = i - 1;
             }
             
-            // Marcar el inicio de la primera sección
             if (firstSectionIndex === -1) {
               firstSectionIndex = i;
+              inSections = true;
             }
             
-            // Iniciar nueva sección
             currentSection = sectionName;
             currentContent = [];
-            isSectionHeader = true;
-            matchedSectionName = sectionName;
+            foundSection = true;
             
-            // Extraer contenido de la misma línea si existe (formato "SECCIÓN | contenido" o "SECCIÓN: contenido")
-            const separatorIndex = trimmedLine.toUpperCase().indexOf(sectionName) + sectionName.length;
-            const afterSection = trimmedLine.substring(separatorIndex).trim();
-            if (afterSection) {
-              // Remover separadores (| o :)
-              const content = afterSection.replace(/^[|:]\s*/, '').trim();
-              if (content) {
-                currentContent.push(content);
+            const sectionPattern = new RegExp(sectionName.replace(/\s+/g, '\\s*'), 'i');
+            const match = trimmedLine.match(sectionPattern);
+            
+            if (match) {
+              const afterMatch = trimmedLine.substring(match.index + match[0].length).trim();
+              if (afterMatch) {
+                let content = afterMatch.replace(/^\([^)]+\)\s*/, '');
+                content = content.replace(/^[|:\-]\s*/, '').trim();
+                if (content) {
+                  currentContent.push(content);
+                }
               }
             }
             break;
@@ -755,32 +1194,21 @@ function App() {
         }
       }
 
-      if (!isSectionHeader) {
+      if (!foundSection) {
         if (currentSection) {
-          // Agregar contenido a la sección actual
           currentContent.push(line);
-        } else if (firstSectionIndex === -1) {
-          // Antes de la primera sección
+        } else if (!inSections) {
           beforeText.push(line);
         } else {
-          // Después de la última sección (pero solo si ya terminamos todas las secciones)
-          // Esto se manejará después del loop
+          afterText.push(line);
         }
       }
     }
 
-    // Guardar la última sección
     if (currentSection) {
       sections[currentSection] = currentContent.join('\n').trim();
-      lastSectionIndex = lines.length - 1;
     }
 
-    // Extraer texto después de las secciones
-    if (lastSectionIndex >= 0 && lastSectionIndex < lines.length - 1) {
-      afterText = lines.slice(lastSectionIndex + 1);
-    }
-
-    // Verificar si encontramos al menos una sección
     if (Object.keys(sections).length > 0) {
       return {
         sections: sections,
@@ -790,6 +1218,20 @@ function App() {
     }
 
     return null;
+  };
+
+  // Función para obtener el icono según la sección
+  const getSectionIcon = (sectionName) => {
+    const iconMap = {
+      'ALOJAMIENTO': Hotel,
+      'COMIDA LOCAL': UtensilsCrossed,
+      'LUGARES IMPERDIBLES': MapPin,
+      'CONSEJOS LOCALES': Lightbulb,
+      'ESTIMACIÓN DE COSTOS': DollarSign
+    };
+    
+    const IconComponent = iconMap[sectionName] || MapPin;
+    return <IconComponent size={20} />;
   };
 
   // Función para navegar el carrusel
@@ -1379,6 +1821,15 @@ function App() {
     <div className="App">
       <div className="container">
         <header className="header">
+          <button 
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="back-to-form-button-header"
+            title="Modificar información del viaje"
+          >
+            <ArrowLeft size={14} />
+            <span>Modificar viaje</span>
+          </button>
           <h1 className="title">ViajeIA</h1>
           <p className="subtitle">
             Alex, tu Consultor Personal de Viajes{' '}
@@ -1388,14 +1839,6 @@ function App() {
         </header>
 
         <main className="main-content">
-          <button 
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="back-to-form-button"
-          >
-            <ArrowLeft size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '6px' }} />
-            Modificar información del viaje
-          </button>
 
           <form onSubmit={handleSubmit} className="form">
             <div className="input-group">
@@ -1409,23 +1852,54 @@ function App() {
               />
             </div>
             
-            <button 
-              type="submit" 
-              className="submit-button"
-              disabled={loading || !question.trim()}
-            >
-              {loading ? 'Planificando...' : 'Planificar mi viaje'}
-            </button>
+            <div className="form-actions">
+              <button 
+                type="submit" 
+                className="submit-button"
+                disabled={loading || !question.trim()}
+              >
+                {loading ? (
+                  <>
+                    <span>Planificando...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Planificar mi viaje</span>
+                    <ArrowRight size={18} />
+                  </>
+                )}
+              </button>
+            </div>
           </form>
 
           {response && (() => {
             const parsed = parseResponseSections(response);
             
-            if (parsed && parsed.sections) {
+            if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
               // Mostrar carrusel si hay secciones
               const sectionKeys = Object.keys(parsed.sections);
-              const currentSectionKey = sectionKeys[carouselIndex];
+              const validIndex = Math.min(carouselIndex, sectionKeys.length - 1);
+              const currentSectionKey = sectionKeys[validIndex];
               const currentSectionContent = parsed.sections[currentSectionKey];
+
+              if (!currentSectionKey || !currentSectionContent) {
+                // Si no hay sección válida, mostrar respuesta normal
+                return (
+                  <div className="response-container">
+                    <div className="response-header">
+                      <h2>
+                        Respuesta de Alex{' '}
+                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
+                      </h2>
+                    </div>
+                    <div className="response-content">
+                      <div className="response-text">{response}</div>
+                    </div>
+                  </div>
+                );
+              }
+
+              const hasMultipleSections = sectionKeys.length > 1;
 
               return (
                 <div className="response-container">
@@ -1436,61 +1910,79 @@ function App() {
                     </h2>
                   </div>
                   <div className="response-content">
-                    {/* Mostrar texto antes de las secciones si existe */}
-                    {parsed.beforeText && (
+                    {/* Mostrar texto antes de las secciones solo si contiene información útil */}
+                    {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
                       <div className="response-text response-text-before">
-                        {parsed.beforeText}
+                        {renderPlainText(parsed.beforeText)}
                       </div>
                     )}
                     
                     {/* Carrusel con las secciones */}
                     <div className="carousel-container">
-                      <button
-                        className="carousel-button carousel-button-left"
-                        onClick={() => navigateCarousel('prev')}
-                        aria-label="Sección anterior"
-                      >
-                        <ChevronLeft size={24} />
-                      </button>
-                      
                       <div className="carousel-slide">
-                        <div className={`carousel-card ${carouselDirection === 'left' ? 'slide-left' : ''}`} key={carouselIndex}>
+                        <div className={`carousel-card ${carouselDirection === 'left' ? 'slide-left' : ''}`} key={validIndex}>
                           <div className="carousel-section-header">
-                            <h3 className="carousel-section-title">{currentSectionKey}</h3>
-                            <div className="carousel-indicator">
-                              {carouselIndex + 1} / {sectionKeys.length}
+                            <div className="carousel-section-header-left">
+                              {hasMultipleSections && (
+                                <button
+                                  className="carousel-button carousel-button-left"
+                                  onClick={() => navigateCarousel('prev')}
+                                  aria-label="Sección anterior"
+                                >
+                                  <ChevronLeft size={18} />
+                                </button>
+                              )}
+                              <h3 className="carousel-section-title">
+                                <span className="carousel-section-icon">
+                                  {getSectionIcon(currentSectionKey)}
+                                </span>
+                                {currentSectionKey}
+                              </h3>
+                            </div>
+                            <div className="carousel-section-header-right">
+                              {hasMultipleSections && (
+                                <>
+                                  <div className="carousel-indicator">
+                                    {validIndex + 1} / {sectionKeys.length}
+                                  </div>
+                                  <button
+                                    className="carousel-button carousel-button-right"
+                                    onClick={() => navigateCarousel('next')}
+                                    aria-label="Siguiente sección"
+                                  >
+                                    <ChevronRight size={18} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
-                          <div className="carousel-section-content">
-                            <div className="response-text">{currentSectionContent}</div>
+                          <div 
+                            className="carousel-section-content"
+                            ref={contentScrollRef}
+                          >
+                            {renderSectionContent(currentSectionContent, currentSectionKey)}
                           </div>
                         </div>
                       </div>
-                      
-                      <button
-                        className="carousel-button carousel-button-right"
-                        onClick={() => navigateCarousel('next')}
-                        aria-label="Siguiente sección"
-                      >
-                        <ChevronRight size={24} />
-                      </button>
                     </div>
                     
-                    <div className="carousel-dots">
-                      {sectionKeys.map((_, index) => (
-                        <button
-                          key={index}
-                          className={`carousel-dot ${index === carouselIndex ? 'active' : ''}`}
-                          onClick={() => setCarouselIndex(index)}
-                          aria-label={`Ir a sección ${index + 1}`}
-                        />
-                      ))}
-                    </div>
+                    {hasMultipleSections && (
+                      <div className="carousel-dots">
+                        {sectionKeys.map((_, index) => (
+                          <button
+                            key={index}
+                            className={`carousel-dot ${index === validIndex ? 'active' : ''}`}
+                            onClick={() => setCarouselIndex(index)}
+                            aria-label={`Ir a sección ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    )}
                     
-                    {/* Mostrar texto después de las secciones si existe */}
-                    {parsed.afterText && (
+                    {/* Mostrar texto después de las secciones solo si contiene información útil */}
+                    {parsed.afterText && parsed.afterText.trim().length > 0 && (
                       <div className="response-text response-text-after">
-                        {parsed.afterText}
+                        {renderPlainText(parsed.afterText)}
                       </div>
                     )}
                   </div>
@@ -1507,7 +1999,9 @@ function App() {
                     </h2>
                   </div>
                   <div className="response-content">
-                    <div className="response-text">{response}</div>
+                    <div className="response-text">
+                      {renderPlainText(response)}
+                    </div>
                   </div>
                 </div>
               );
