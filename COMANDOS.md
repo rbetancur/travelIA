@@ -71,11 +71,26 @@ npm start
 
 ## ✅ Verificar Configuración
 
-### Verificar API Key
+### Verificar API Keys
 ```bash
 echo $GEMINI_API_KEY            # Linux/Mac
+echo $OPENWEATHER_API_KEY       # Linux/Mac
 $env:GEMINI_API_KEY             # Windows PowerShell
+$env:OPENWEATHER_API_KEY        # Windows PowerShell
 echo %GEMINI_API_KEY%           # Windows CMD
+echo %OPENWEATHER_API_KEY%      # Windows CMD
+```
+
+### Validar API Key de OpenWeatherMap
+```bash
+cd backend
+source venv/bin/activate        # Windows: venv\Scripts\activate
+python3 test_openweather.py
+```
+
+O con una API key específica:
+```bash
+python3 test_openweather.py tu_api_key_aqui
 ```
 
 ### Verificar Backend

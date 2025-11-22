@@ -5,6 +5,7 @@ from typing import Optional
 import google.generativeai as genai
 import os
 from prompts import load_prompt
+from weather import WeatherService, extract_destination_from_question
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -61,6 +62,26 @@ else:
     print(f"✅ API Key de Gemini configurada ({masked_key})")
     genai.configure(api_key=GEMINI_API_KEY)
 
+# Inicializar servicio de clima
+weather_service = WeatherService()
+if weather_service.is_available():
+    masked_weather_key = f"{weather_service.api_key[:10]}...{weather_service.api_key[-4:]}" if len(weather_service.api_key) > 14 else "***"
+    print(f"✅ API Key de OpenWeatherMap configurada ({masked_weather_key})")
+    
+    # Validar la API key al inicio
+    print("🔍 Validando API key de OpenWeatherMap...")
+    is_valid, error_msg = weather_service.validate_api_key()
+    if is_valid:
+        print("✅ API key de OpenWeatherMap válida y funcionando")
+    else:
+        print(f"❌ API key de OpenWeatherMap no válida: {error_msg}")
+        print("   El clima no estará disponible hasta que corrijas la API key")
+        print("   Verifica en: https://home.openweathermap.org/api_keys")
+else:
+    print("⚠️  ADVERTENCIA: OPENWEATHER_API_KEY no encontrada")
+    print("   El clima no estará disponible. Configura la variable de entorno OPENWEATHER_API_KEY")
+    print("   Ver SECRETS.md para más detalles")
+
 # Configurar CORS para permitir requests del frontend
 app.add_middleware(
     CORSMiddleware,
@@ -77,6 +98,7 @@ class TravelQuery(BaseModel):
 
 class TravelResponse(BaseModel):
     answer: str
+    weather: Optional[str] = None
 
 
 class DestinationsResponse(BaseModel):
@@ -174,7 +196,25 @@ async def plan_travel(query: TravelQuery):
                 detail="La respuesta de Gemini está vacía o en formato inesperado"
             )
         
-        return TravelResponse(answer=response_text)
+        # Intentar obtener el clima del destino si está disponible
+        weather_message = None
+        if weather_service.is_available():
+            destination = extract_destination_from_question(query.question)
+            if destination:
+                city, country = destination
+                print(f"🌤️ Intentando obtener clima para: {city}, {country}")
+                weather_data = weather_service.get_weather(city, country)
+                if weather_data:
+                    weather_message = weather_service.format_weather_message(weather_data)
+                    print(f"✅ Clima obtenido exitosamente")
+                else:
+                    print(f"❌ No se pudo obtener el clima para {city}, {country}")
+            else:
+                print(f"⚠️ No se pudo extraer el destino de la pregunta")
+        else:
+            print(f"⚠️ Servicio de clima no disponible (API key no configurada)")
+        
+        return TravelResponse(answer=response_text, weather=weather_message)
         
     except HTTPException:
         # Re-lanzar excepciones HTTP directamente
@@ -379,4 +419,40 @@ async def search_destinations(search_query: DestinationSearchQuery):
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/api/weather/cache/stats")
+def get_weather_cache_stats():
+    """
+    Endpoint para obtener estadísticas del cache de clima.
+    """
+    if not weather_service.is_available():
+        return {
+            "error": "Servicio de clima no disponible",
+            "cache_stats": None
+        }
+    
+    stats = weather_service.cache.get_stats()
+    return {
+        "cache_stats": stats,
+        "api_available": not weather_service.api_unavailable
+    }
+
+
+@app.post("/api/weather/cache/clear")
+def clear_weather_cache():
+    """
+    Endpoint para limpiar el cache de clima.
+    """
+    if not weather_service.is_available():
+        return {
+            "error": "Servicio de clima no disponible",
+            "cleared": False
+        }
+    
+    weather_service.cache.clear()
+    return {
+        "message": "Cache limpiado exitosamente",
+        "cleared": True
+    }
 

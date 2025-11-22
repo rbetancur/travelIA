@@ -59,6 +59,7 @@ function App() {
   const [showTravelersModal, setShowTravelersModal] = useState(false);
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
+  const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [carouselDirection, setCarouselDirection] = useState('right');
@@ -664,6 +665,7 @@ function App() {
     // Si hay cambios o no hay respuesta previa, hacer la petición
     setLoading(true);
     setResponse('');
+    setWeather(null);
     setCarouselIndex(0);
     
     // Guardar los datos actuales para la próxima comparación
@@ -676,6 +678,8 @@ function App() {
       });
 
       setResponse(result.data.answer);
+      setWeather(result.data.weather || null);
+      console.log('🌤️ Clima recibido (formulario):', result.data.weather);
     } catch (error) {
       console.error('Error:', error);
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
@@ -1264,6 +1268,7 @@ function App() {
 
     setLoading(true);
     setResponse('');
+    setWeather(null);
     setCarouselIndex(0);
 
     try {
@@ -1272,6 +1277,8 @@ function App() {
       });
 
       setResponse(result.data.answer);
+      setWeather(result.data.weather || null);
+      console.log('🌤️ Clima recibido (pregunta directa):', result.data.weather);
     } catch (error) {
       console.error('Error:', error);
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
@@ -1910,6 +1917,20 @@ function App() {
                     </h2>
                   </div>
                   <div className="response-content">
+                    {/* Mostrar clima si está disponible */}
+                    {weather && (
+                      <div className="weather-info" style={{
+                        backgroundColor: '#e3f2fd',
+                        border: '1px solid #90caf9',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        marginBottom: '20px',
+                        fontSize: '14px',
+                        lineHeight: '1.6'
+                      }}>
+                        <div style={{ whiteSpace: 'pre-line' }} dangerouslySetInnerHTML={{ __html: weather.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }} />
+                      </div>
+                    )}
                     {/* Mostrar texto antes de las secciones solo si contiene información útil */}
                     {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
                       <div className="response-text response-text-before">
@@ -1999,6 +2020,20 @@ function App() {
                     </h2>
                   </div>
                   <div className="response-content">
+                    {/* Mostrar clima si está disponible */}
+                    {weather && (
+                      <div className="weather-info" style={{
+                        backgroundColor: '#e3f2fd',
+                        border: '1px solid #90caf9',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        marginBottom: '20px',
+                        fontSize: '14px',
+                        lineHeight: '1.6'
+                      }}>
+                        <div style={{ whiteSpace: 'pre-line' }} dangerouslySetInnerHTML={{ __html: weather.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }} />
+                      </div>
+                    )}
                     <div className="response-text">
                       {renderPlainText(response)}
                     </div>
