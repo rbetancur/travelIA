@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import google.generativeai as genai
 import os
 from prompts import load_prompt
 from weather import WeatherService, extract_destination_from_question, parse_form_destination
+from unsplash import UnsplashService
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -82,6 +83,26 @@ else:
     print("   El clima no estará disponible. Configura la variable de entorno OPENWEATHER_API_KEY")
     print("   Ver SECRETS.md para más detalles")
 
+# Inicializar servicio de Unsplash
+unsplash_service = UnsplashService()
+if unsplash_service.is_available():
+    masked_unsplash_key = f"{unsplash_service.api_key[:10]}...{unsplash_service.api_key[-4:]}" if len(unsplash_service.api_key) > 14 else "***"
+    print(f"✅ API Key de Unsplash configurada ({masked_unsplash_key})")
+    
+    # Validar la API key al inicio
+    print("🔍 Validando API key de Unsplash...")
+    is_valid, error_msg = unsplash_service.validate_api_key()
+    if is_valid:
+        print("✅ API key de Unsplash válida y funcionando")
+    else:
+        print(f"❌ API key de Unsplash no válida: {error_msg}")
+        print("   Las fotos no estarán disponibles hasta que corrijas la API key")
+        print("   Verifica en: https://unsplash.com/developers")
+else:
+    print("⚠️  ADVERTENCIA: UNSPLASH_API_KEY no encontrada")
+    print("   Las fotos no estarán disponibles. Configura la variable de entorno UNSPLASH_API_KEY")
+    print("   Ver SECRETS.md para más detalles")
+
 # Configurar CORS para permitir requests del frontend
 app.add_middleware(
     CORSMiddleware,
@@ -100,6 +121,7 @@ class TravelQuery(BaseModel):
 class TravelResponse(BaseModel):
     answer: str
     weather: Optional[str] = None
+    photos: Optional[List[Dict[str, Any]]] = None
 
 
 class DestinationsResponse(BaseModel):
@@ -197,37 +219,57 @@ async def plan_travel(query: TravelQuery):
                 detail="La respuesta de Gemini está vacía o en formato inesperado"
             )
         
-        # Intentar obtener el clima del destino si está disponible
+        # Intentar obtener el clima y fotos del destino si está disponible
         weather_message = None
-        if weather_service.is_available():
-            # Prioridad 1: Usar destino del formulario si está disponible
-            destination = None
-            if query.destination:
-                destination = parse_form_destination(query.destination)
-                if destination:
-                    print(f"📍 Usando destino del formulario: {query.destination}")
-            
-            # Prioridad 2: Extraer destino del texto de la pregunta si no hay destino del formulario
-            if not destination:
-                destination = extract_destination_from_question(query.question)
-                if destination:
-                    print(f"📍 Destino extraído del texto de la pregunta")
-            
+        photos = None
+        
+        # Prioridad 1: Usar destino del formulario si está disponible
+        destination = None
+        destination_string = None
+        
+        if query.destination:
+            destination = parse_form_destination(query.destination)
+            if destination:
+                destination_string = query.destination
+                print(f"📍 Usando destino del formulario: {query.destination}")
+        
+        # Prioridad 2: Extraer destino del texto de la pregunta si no hay destino del formulario
+        if not destination:
+            destination = extract_destination_from_question(query.question)
             if destination:
                 city, country = destination
-                print(f"🌤️ Intentando obtener clima para: {city}, {country}")
-                weather_data = weather_service.get_weather(city, country)
-                if weather_data:
-                    weather_message = weather_service.format_weather_message(weather_data)
-                    print(f"✅ Clima obtenido exitosamente")
-                else:
-                    print(f"❌ No se pudo obtener el clima para {city}, {country}")
-            else:
-                print(f"⚠️ No se pudo obtener el destino (ni del formulario ni del texto)")
-        else:
-            print(f"⚠️ Servicio de clima no disponible (API key no configurada)")
+                destination_string = f"{city}, {country}"
+                print(f"📍 Destino extraído del texto de la pregunta: {destination_string}")
         
-        return TravelResponse(answer=response_text, weather=weather_message)
+        if destination_string:
+            # Obtener clima
+            if weather_service.is_available():
+                city, country = destination if destination else (None, None)
+                if city and country:
+                    print(f"🌤️ Intentando obtener clima para: {city}, {country}")
+                    weather_data = weather_service.get_weather(city, country)
+                    if weather_data:
+                        weather_message = weather_service.format_weather_message(weather_data)
+                        print(f"✅ Clima obtenido exitosamente")
+                    else:
+                        print(f"❌ No se pudo obtener el clima para {city}, {country}")
+            
+            # Obtener fotos
+            if unsplash_service.is_available():
+                print(f"📸 Intentando obtener fotos para: {destination_string}")
+                photos = unsplash_service.get_photos(destination_string, count=3)
+                if photos:
+                    print(f"✅ {len(photos)} fotos obtenidas exitosamente")
+                else:
+                    print(f"❌ No se pudo obtener fotos para {destination_string}")
+            else:
+                print(f"⚠️ Servicio de fotos no disponible (API key no configurada)")
+        else:
+            print(f"⚠️ No se pudo obtener el destino (ni del formulario ni del texto)")
+            if not weather_service.is_available():
+                print(f"⚠️ Servicio de clima no disponible (API key no configurada)")
+        
+        return TravelResponse(answer=response_text, weather=weather_message, photos=photos)
         
     except HTTPException:
         # Re-lanzar excepciones HTTP directamente

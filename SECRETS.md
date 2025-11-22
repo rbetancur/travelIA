@@ -10,10 +10,11 @@ Este proyecto usa **SOLO variables de entorno del sistema** (no archivos .env).
 
 ## 🔑 API Keys Requeridas
 
-Este proyecto necesita **2 API keys**:
+Este proyecto necesita **3 API keys**:
 
 1. **GEMINI_API_KEY**: Para Google Gemini AI (obligatoria)
 2. **OPENWEATHER_API_KEY**: Para OpenWeatherMap (opcional, pero recomendada para mostrar clima)
+3. **UNSPLASH_API_KEY**: Para Unsplash (opcional, pero recomendada para mostrar fotos del destino)
 
 ---
 
@@ -172,6 +173,92 @@ Configurar en: Panel de Control > Sistema > Variables de Entorno
 
 ---
 
+## 📸 3. Unsplash API Key
+
+### Obtener la API Key (GRATUITA)
+
+1. Ve a [Unsplash Developers](https://unsplash.com/developers)
+2. Haz clic en "Register as a developer" o "Get started" en la parte superior
+3. Inicia sesión con tu cuenta de Unsplash (o crea una cuenta nueva)
+4. Una vez dentro del dashboard, haz clic en "New Application"
+5. Completa el formulario:
+   - **Application name**: Nombre de tu aplicación (ej: "ViajeIA")
+   - **Description**: Descripción breve (ej: "Aplicación de planificación de viajes")
+   - Acepta los términos de uso
+6. Haz clic en "Create application"
+7. Verás tu **Access Key** (también llamada "Application ID") - **esta es tu API key**
+8. Copia la API key (tiene el formato: `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`)
+
+### Plan Gratuito de Unsplash
+
+El plan gratuito incluye:
+- ✅ 50 solicitudes por hora
+- ✅ Acceso a búsqueda de fotos
+- ✅ Fotos de alta calidad
+- ✅ Más que suficiente para uso personal/proyectos pequeños
+
+### ⚠️ IMPORTANTE: Límites de la API
+
+**Después de crear tu aplicación, la API key está activa inmediatamente.**
+
+Si recibes un error **401 (Unauthorized)** o **403 (Forbidden)**:
+
+1. **Verifica la API key**: Asegúrate de copiar la "Access Key" completa
+2. **Revisa los límites**: El plan gratuito tiene 50 solicitudes por hora
+3. **Verifica la aplicación**: Ve a [Unsplash Applications](https://unsplash.com/oauth/applications) y verifica que tu aplicación esté activa
+
+### Configurar API Key
+
+**Método 1: Temporal (Solo para esta sesión)**
+
+**Linux/Mac:**
+```bash
+export UNSPLASH_API_KEY=tu_api_key_aqui
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:UNSPLASH_API_KEY="tu_api_key_aqui"
+```
+
+**Windows (CMD):**
+```cmd
+set UNSPLASH_API_KEY=tu_api_key_aqui
+```
+
+**Método 2: Permanente (Recomendado)**
+
+**Linux/Mac (zsh):**
+```bash
+# Agregar a .zshrc
+echo 'export UNSPLASH_API_KEY=tu_api_key_aqui' >> ~/.zshrc
+
+# Para la sesión actual (evita error de compdef)
+export UNSPLASH_API_KEY=tu_api_key_aqui
+
+# O simplemente abre una nueva terminal
+```
+
+**Linux/Mac (bash):**
+```bash
+echo 'export UNSPLASH_API_KEY=tu_api_key_aqui' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Windows (PowerShell):**
+```powershell
+[System.Environment]::SetEnvironmentVariable('UNSPLASH_API_KEY', 'tu_api_key_aqui', 'User')
+```
+
+**Windows (GUI):**
+Configurar en: Panel de Control > Sistema > Variables de Entorno
+
+**Nota:** 
+- Para zsh: Después de agregar a `.zshrc`, exporta la variable en la sesión actual o abre una nueva terminal (evita el error `compdef` al ejecutar `source ~/.zshrc`).
+- Para bash: Después de configurar, reinicia la terminal o ejecuta `source ~/.bashrc`.
+
+---
+
 ## ✅ Verificar Configuración
 
 ### Verificar Gemini API Key
@@ -186,6 +273,13 @@ echo %GEMINI_API_KEY%           # Windows CMD
 echo $OPENWEATHER_API_KEY       # Linux/Mac
 $env:OPENWEATHER_API_KEY        # Windows PowerShell
 echo %OPENWEATHER_API_KEY%      # Windows CMD
+```
+
+### Verificar Unsplash API Key
+```bash
+echo $UNSPLASH_API_KEY          # Linux/Mac
+$env:UNSPLASH_API_KEY           # Windows PowerShell
+echo %UNSPLASH_API_KEY%         # Windows CMD
 ```
 
 ---
@@ -219,6 +313,13 @@ Si expusiste una API key por error:
 2. Elimina o regenera la API key comprometida
 3. Genera una nueva API key
 4. Actualiza la variable de entorno `OPENWEATHER_API_KEY`
+
+### Unsplash API Key
+1. Ve a [Unsplash Applications](https://unsplash.com/oauth/applications)
+2. Elimina la aplicación comprometida
+3. Crea una nueva aplicación
+4. Copia la nueva Access Key
+5. Actualiza la variable de entorno `UNSPLASH_API_KEY`
 
 ---
 
@@ -290,3 +391,22 @@ Si ves este error en los logs del backend:
    - Abre DevTools (F12) > Console
    - Deberías ver: `🌤️ Clima recibido: ...`
    - Si ves `null`, el clima no está llegando del backend
+
+### Las fotos no se muestran aunque la API key esté configurada
+
+1. **Revisa los logs del backend**
+   - Deberías ver: `✅ API key de Unsplash válida y funcionando`
+   - Si ves errores, verifica la API key
+
+2. **Verifica que el destino se extraiga correctamente**
+   - Los logs mostrarán: `📸 Intentando obtener fotos para: Ciudad, País`
+   - Si no se extrae, prueba con formato: "Quiero viajar a Barcelona, España"
+
+3. **Revisa la consola del navegador**
+   - Abre DevTools (F12) > Console
+   - Deberías ver: `📸 Fotos recibidas: ...`
+   - Si ves `null`, las fotos no están llegando del backend
+
+4. **Verifica los límites de la API**
+   - El plan gratuito tiene 50 solicitudes por hora
+   - Si excedes el límite, espera una hora antes de volver a intentar

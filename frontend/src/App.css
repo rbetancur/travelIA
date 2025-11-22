@@ -310,6 +310,121 @@
   line-height: 1.7;
 }
 
+/* Destination Photos Styles */
+.destination-photos-container {
+  margin-bottom: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.destination-photos-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.photos-icon {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.destination-photos-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.destination-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.destination-photo-item {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.destination-photo-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.destination-photo-link {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  text-decoration: none;
+  color: inherit;
+}
+
+.destination-photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.destination-photo-item:hover .destination-photo-image {
+  transform: scale(1.05);
+}
+
+.destination-photo-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  padding: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.destination-photo-item:hover .destination-photo-overlay {
+  opacity: 1;
+}
+
+.destination-photo-credit {
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Responsive: En pantallas pequeñas, mostrar 1 foto por fila */
+@media (max-width: 768px) {
+  .destination-photos-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .destination-photos-container {
+    padding: 16px 0;
+  }
+  
+  .destination-photos-title {
+    font-size: 1.1rem;
+  }
+}
+
+/* En pantallas medianas, mostrar 2 fotos */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .destination-photos-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .response-content p {
   margin: 0;
   white-space: pre-wrap;

@@ -27,7 +27,8 @@ import {
   Cloud,
   Thermometer,
   Droplets,
-  Wind
+  Wind,
+  Image
 } from 'lucide-react';
 import './App.css';
 
@@ -64,6 +65,7 @@ function App() {
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
   const [weather, setWeather] = useState(null);
+  const [photos, setPhotos] = useState(null);
   const [loading, setLoading] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [carouselDirection, setCarouselDirection] = useState('right');
@@ -670,6 +672,7 @@ function App() {
     setLoading(true);
     setResponse('');
     setWeather(null);
+    setPhotos(null);
     setCarouselIndex(0);
     
     // Guardar los datos actuales para la próxima comparación
@@ -684,7 +687,9 @@ function App() {
 
       setResponse(result.data.answer);
       setWeather(result.data.weather || null);
+      setPhotos(result.data.photos || null);
       console.log('🌤️ Clima recibido (formulario):', result.data.weather);
+      console.log('📸 Fotos recibidas (formulario):', result.data.photos);
     } catch (error) {
       console.error('Error:', error);
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
@@ -1325,6 +1330,7 @@ function App() {
     setLoading(true);
     setResponse('');
     setWeather(null);
+    setPhotos(null);
     setCarouselIndex(0);
 
     try {
@@ -1334,7 +1340,9 @@ function App() {
 
       setResponse(result.data.answer);
       setWeather(result.data.weather || null);
+      setPhotos(result.data.photos || null);
       console.log('🌤️ Clima recibido (pregunta directa):', result.data.weather);
+      console.log('📸 Fotos recibidas (pregunta directa):', result.data.photos);
     } catch (error) {
       console.error('Error:', error);
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
@@ -2021,6 +2029,41 @@ function App() {
                     )}
                   </div>
                   <div className="response-content">
+                    {/* Mostrar fotos del destino si están disponibles */}
+                    {photos && photos.length > 0 && (
+                      <div className="destination-photos-container">
+                        <div className="destination-photos-header">
+                          <Image size={20} className="photos-icon" />
+                          <h3 className="destination-photos-title">Fotos del Destino</h3>
+                        </div>
+                        <div className="destination-photos-grid">
+                          {photos.map((photo, index) => (
+                            <div key={photo.id || index} className="destination-photo-item">
+                              <a
+                                href={photo.url_full || photo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="destination-photo-link"
+                                title={photo.description || `Foto de ${photo.photographer}`}
+                              >
+                                <img
+                                  src={photo.url || photo.url_small}
+                                  alt={photo.description || `Foto del destino`}
+                                  className="destination-photo-image"
+                                  loading="lazy"
+                                />
+                                <div className="destination-photo-overlay">
+                                  <div className="destination-photo-credit">
+                                    Foto por {photo.photographer}
+                                  </div>
+                                </div>
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Mostrar texto antes de las secciones solo si contiene información útil */}
                     {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
                       <div className="response-text response-text-before">
@@ -2158,6 +2201,41 @@ function App() {
                     )}
                   </div>
                   <div className="response-content">
+                    {/* Mostrar fotos del destino si están disponibles */}
+                    {photos && photos.length > 0 && (
+                      <div className="destination-photos-container">
+                        <div className="destination-photos-header">
+                          <Image size={20} className="photos-icon" />
+                          <h3 className="destination-photos-title">Fotos del Destino</h3>
+                        </div>
+                        <div className="destination-photos-grid">
+                          {photos.map((photo, index) => (
+                            <div key={photo.id || index} className="destination-photo-item">
+                              <a
+                                href={photo.url_full || photo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="destination-photo-link"
+                                title={photo.description || `Foto de ${photo.photographer}`}
+                              >
+                                <img
+                                  src={photo.url || photo.url_small}
+                                  alt={photo.description || `Foto del destino`}
+                                  className="destination-photo-image"
+                                  loading="lazy"
+                                />
+                                <div className="destination-photo-overlay">
+                                  <div className="destination-photo-credit">
+                                    Foto por {photo.photographer}
+                                  </div>
+                                </div>
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="response-text">
                       {renderPlainText(response)}
                     </div>
