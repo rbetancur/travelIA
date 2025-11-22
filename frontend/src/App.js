@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useTransition, startTransition } from 'react';
 import axios from 'axios';
 import { 
   Luggage, 
@@ -72,6 +72,300 @@ function App() {
   const contentScrollRef = useRef(null);
   const lastFormDataRef = useRef(null);
   const lastTripTypeRef = useRef(null);
+  const [isPending, startTransition] = useTransition();
+  
+  // Función para limpiar texto técnico innecesario (debe estar antes de parseResponseSections)
+  const cleanText = useCallback((text) => {
+    if (!text) return '';
+    
+    // Eliminar bloques de código markdown (```json, ```, etc.)
+    let cleaned = text
+      .replace(/```[\s\S]*?```/g, '') // Eliminar bloques de código completos
+      .replace(/```json\s*/gi, '') // Eliminar inicio de bloque json
+      .replace(/```\s*/g, '') // Eliminar cierres de bloque
+      .replace(/^\s*json\s*$/gmi, '') // Eliminar líneas que solo dicen "json"
+      .trim();
+    
+    // Eliminar líneas que solo contienen caracteres técnicos o están vacías
+    const lines = cleaned.split('\n')
+      .map(line => line.trim())
+      .filter(line => {
+        // Filtrar líneas vacías o que solo contienen caracteres técnicos
+        if (!line) return false;
+        // Eliminar líneas que son solo símbolos técnicos
+        if (/^[`{}[\],:;]+$/.test(line)) return false;
+        // Eliminar líneas que empiezan con caracteres técnicos comunes
+        if (/^[`{}\]\[,;:]/.test(line) && line.length < 10) return false;
+        return true;
+      });
+    
+    cleaned = lines.join('\n').trim();
+    
+    // Si después de limpiar no queda nada útil, retornar vacío
+    if (!cleaned || cleaned.length < 3) return '';
+    
+    return cleaned;
+  }, []);
+
+  // Función de respaldo para parsear formato TOON legacy
+  const parseResponseSectionsLegacy = useCallback((responseText) => {
+    const sections = {};
+    const sectionNames = [
+      'ALOJAMIENTO',
+      'COMIDA LOCAL',
+      'LUGARES IMPERDIBLES',
+      'CONSEJOS LOCALES',
+      'ESTIMACIÓN DE COSTOS'
+    ];
+
+    const lines = responseText.split('\n');
+    let currentSection = null;
+    let currentContent = [];
+    let beforeText = [];
+    let afterText = [];
+    let firstSectionIndex = -1;
+    let inSections = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      const trimmedLine = line.trim();
+      
+      if (!trimmedLine) {
+        if (currentSection) {
+          currentContent.push('');
+        } else if (!inSections) {
+          beforeText.push(line);
+        } else {
+          afterText.push(line);
+        }
+        continue;
+      }
+
+      let foundSection = false;
+      
+      for (const sectionName of sectionNames) {
+        const upperLine = trimmedLine.toUpperCase();
+        const normalizedSectionName = sectionName.replace(/\s+/g, ' ');
+        const normalizedLine = upperLine.replace(/\s+/g, ' ');
+        
+        if (normalizedLine.startsWith(normalizedSectionName)) {
+          const afterName = normalizedLine.substring(normalizedSectionName.length).trim();
+          const hasSeparator = afterName === '' || 
+                              afterName.startsWith('|') || 
+                              afterName.startsWith(':') ||
+                              /^\([^)]+\)\s*[|:]/.test(afterName);
+          
+          if (hasSeparator) {
+            if (currentSection) {
+              sections[currentSection] = currentContent.join('\n').trim();
+            }
+            
+            if (firstSectionIndex === -1) {
+              firstSectionIndex = i;
+              inSections = true;
+            }
+            
+            currentSection = sectionName;
+            currentContent = [];
+            foundSection = true;
+            
+            const sectionPattern = new RegExp(sectionName.replace(/\s+/g, '\\s*'), 'i');
+            const match = trimmedLine.match(sectionPattern);
+            
+            if (match) {
+              const afterMatch = trimmedLine.substring(match.index + match[0].length).trim();
+              if (afterMatch) {
+                let content = afterMatch.replace(/^\([^)]+\)\s*/, '');
+                content = content.replace(/^[|:\-]\s*/, '').trim();
+                if (content) {
+                  currentContent.push(content);
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+
+      if (!foundSection) {
+        if (currentSection) {
+          currentContent.push(line);
+        } else if (!inSections) {
+          beforeText.push(line);
+        } else {
+          afterText.push(line);
+        }
+      }
+    }
+
+    if (currentSection) {
+      sections[currentSection] = currentContent.join('\n').trim();
+    }
+
+    if (Object.keys(sections).length > 0) {
+      return {
+        sections: sections,
+        beforeText: beforeText.join('\n').trim(),
+        afterText: afterText.join('\n').trim()
+      };
+    }
+
+    return null;
+  }, []);
+
+  // Función para parsear las secciones de la respuesta (memoizada)
+  const parseResponseSections = useCallback((responseText) => {
+    if (!responseText) return null;
+
+    // Mapeo de nombres de secciones en JSON a nombres para mostrar
+    const sectionMapping = {
+      'alojamiento': 'ALOJAMIENTO',
+      'comida_local': 'COMIDA LOCAL',
+      'lugares_imperdibles': 'LUGARES IMPERDIBLES',
+      'consejos_locales': 'CONSEJOS LOCALES',
+      'estimacion_costos': 'ESTIMACIÓN DE COSTOS'
+    };
+
+    // Intentar extraer JSON de la respuesta
+    let jsonData = null;
+    let beforeText = '';
+    let afterText = '';
+
+    // Buscar JSON en la respuesta (puede venir con texto antes/después)
+    try {
+      // Intentar encontrar un bloque JSON
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[0];
+        jsonData = JSON.parse(jsonStr);
+        
+        // Extraer texto antes y después del JSON
+        const jsonIndex = responseText.indexOf(jsonStr);
+        if (jsonIndex > 0) {
+          beforeText = cleanText(responseText.substring(0, jsonIndex));
+        }
+        const afterIndex = jsonIndex + jsonStr.length;
+        if (afterIndex < responseText.length) {
+          afterText = cleanText(responseText.substring(afterIndex));
+        }
+      } else {
+        // Si no hay JSON explícito, intentar parsear toda la respuesta como JSON
+        jsonData = JSON.parse(responseText);
+      }
+    } catch (error) {
+      // Si no es JSON válido, intentar parseo legacy (formato TOON)
+      console.warn('No se pudo parsear como JSON, intentando formato legacy:', error);
+      return parseResponseSectionsLegacy(responseText);
+    }
+
+    // Validar que jsonData sea un objeto con las secciones esperadas
+    if (!jsonData || typeof jsonData !== 'object') {
+      console.warn('JSON parseado no es un objeto válido');
+      return parseResponseSectionsLegacy(responseText);
+    }
+
+    // Convertir las secciones del JSON al formato esperado
+    const sections = {};
+    let hasSections = false;
+
+    for (const [jsonKey, displayName] of Object.entries(sectionMapping)) {
+      if (jsonData[jsonKey] && Array.isArray(jsonData[jsonKey])) {
+        // Convertir array a string con saltos de línea
+        sections[displayName] = jsonData[jsonKey]
+          .filter(item => item && typeof item === 'string' && item.trim())
+          .join('\n');
+        hasSections = true;
+      }
+    }
+
+    // Si no encontramos secciones válidas, intentar formato legacy
+    if (!hasSections) {
+      console.warn('No se encontraron secciones válidas en el JSON');
+      return parseResponseSectionsLegacy(responseText);
+    }
+
+    return {
+      sections: sections,
+      beforeText: beforeText,
+      afterText: afterText
+    };
+  }, [cleanText, parseResponseSectionsLegacy]);
+
+  // Función para parsear el mensaje del clima y extraer información (memoizada)
+  const parseWeatherInfo = useCallback((weatherText) => {
+    if (!weatherText) return null;
+    
+    // Extraer ciudad del formato: "🌤️ **Clima Actual en Ciudad, País:**"
+    // También manejar formato sin emoji: "**Clima Actual en Ciudad, País:**"
+    const cityMatch = weatherText.match(/(?:🌤️\s*)?\*\*Clima Actual en ([^:]+):\*\*/);
+    const city = cityMatch ? cityMatch[1].trim() : '';
+    
+    if (!city) return null; // Si no hay ciudad, no hay información válida
+    
+    // Extraer datos del clima (temperatura, condiciones, humedad, viento)
+    const lines = weatherText.split('\n').filter(line => {
+      const trimmed = line.trim();
+      return trimmed && (trimmed.includes('•') || trimmed.includes('T:') || trimmed.includes('Temperatura') || trimmed.includes('Condiciones') || trimmed.includes('Humedad') || trimmed.includes('Viento'));
+    });
+    
+    const weatherData = {
+      temperatura: '',
+      condiciones: '',
+      humedad: '',
+      viento: ''
+    };
+    
+    lines.forEach(line => {
+      const cleanLine = line.replace(/\*\*/g, '').replace(/🌤️/g, '').trim();
+      // Nuevo formato técnico: "T: -1.8°C / ST: -3.9°C"
+      if (cleanLine.includes('T:') && cleanLine.includes('ST:')) {
+        weatherData.temperatura = cleanLine.replace(/•\s*/, '').trim();
+      } else if (cleanLine.includes('Temperatura:')) {
+        // Formato legacy por si acaso
+        weatherData.temperatura = cleanLine.replace(/•\s*Temperatura:\s*/, '').replace(/Temperatura:\s*/, '').trim();
+      } else if (cleanLine.includes('Condiciones:')) {
+        weatherData.condiciones = cleanLine.replace(/•\s*Condiciones:\s*/, '').replace(/Condiciones:\s*/, '').trim();
+      } else if (cleanLine.includes('Humedad:')) {
+        weatherData.humedad = cleanLine.replace(/•\s*Humedad:\s*/, '').replace(/Humedad:\s*/, '').trim();
+      } else if (cleanLine.includes('Viento:')) {
+        weatherData.viento = cleanLine.replace(/•\s*Viento:\s*/, '').replace(/Viento:\s*/, '').trim();
+      }
+    });
+    
+    return { city, ...weatherData };
+  }, []);
+
+  // Memoizar sugerencias filtradas de destinos populares
+  const filteredPopularDestinations = useMemo(() => {
+    if (!formData.destination || formData.destination.trim().length === 0) {
+      return popularDestinations.slice(0, 5);
+    }
+    return popularDestinations.filter(dest =>
+      dest.toLowerCase().includes(formData.destination.toLowerCase())
+    ).slice(0, 5);
+  }, [formData.destination, popularDestinations]);
+
+  // Memoizar el parseo de la respuesta para evitar re-parsear en cada render
+  // IMPORTANTE: Estos hooks deben estar antes de cualquier return condicional
+  const parsedResponse = useMemo(() => {
+    if (!response) return null;
+    return parseResponseSections(response);
+  }, [response, parseResponseSections]);
+
+  // Memoizar información del clima parseada
+  const weatherInfo = useMemo(() => {
+    if (!weather) return null;
+    return parseWeatherInfo(weather);
+  }, [weather]);
+
+  // Preload de destinos populares al montar el componente
+  useEffect(() => {
+    // Cargar destinos populares inmediatamente al montar
+    // Esto asegura que estén disponibles antes de que el usuario interactúe
+    loadPopularDestinations().catch(error => {
+      console.error('Error al precargar destinos populares:', error);
+    });
+  }, []);
 
   // Limpiar timeout al desmontar el componente
   useEffect(() => {
@@ -82,8 +376,8 @@ function App() {
     };
   }, []);
 
-  // Función para actualizar indicadores de scroll
-  const updateScrollIndicators = (element) => {
+  // Función para actualizar indicadores de scroll (memoizada)
+  const updateScrollIndicators = useCallback((element) => {
     if (!element) return;
     
     const { scrollTop, scrollHeight, clientHeight } = element;
@@ -104,7 +398,7 @@ function App() {
     } else {
       element.classList.remove('scrollable-top', 'scrollable-bottom');
     }
-  };
+  }, []);
 
   // Resetear índice del carrusel cuando cambia la respuesta
   useEffect(() => {
@@ -184,14 +478,23 @@ function App() {
     }
   }, [response, carouselIndex, showForm]);
 
-  const calculateDays = (departure, returnDate) => {
+  // Memoizar cálculo de días
+  const calculateDays = useCallback((departure, returnDate) => {
     if (!departure || !returnDate) return 0;
     const dep = new Date(departure);
     const ret = new Date(returnDate);
     const diffTime = Math.abs(ret - dep);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
-  };
+  }, []);
+
+  // Memoizar días calculados del formulario
+  const calculatedDays = useMemo(() => {
+    if (tripType === 'closed' && formData.departureDate && formData.returnDate) {
+      return calculateDays(formData.departureDate, formData.returnDate);
+    }
+    return null;
+  }, [tripType, formData.departureDate, formData.returnDate, calculateDays]);
 
   const handleQuickDurationSelect = (days) => {
     if (!formData.departureDate) {
@@ -556,7 +859,8 @@ function App() {
     setShowTravelersModal(false);
   };
 
-  const loadPopularDestinations = async () => {
+  // Memoizar función de carga de destinos populares
+  const loadPopularDestinations = useCallback(async () => {
     // Si ya tenemos destinos populares cargados, no volver a cargar
     if (popularDestinations.length > 0) {
       return popularDestinations;
@@ -566,7 +870,9 @@ function App() {
     try {
       const result = await axios.get(`${API_URL}/api/destinations/popular`);
       if (result.data && result.data.destinations) {
-        setPopularDestinations(result.data.destinations);
+        startTransition(() => {
+          setPopularDestinations(result.data.destinations);
+        });
         return result.data.destinations;
       }
     } catch (error) {
@@ -579,15 +885,18 @@ function App() {
         'Bali, Indonesia',
         'Barcelona, España'
       ];
-      setPopularDestinations(defaultDestinations);
+      startTransition(() => {
+        setPopularDestinations(defaultDestinations);
+      });
       return defaultDestinations;
     } finally {
       setLoadingDestinations(false);
     }
     return [];
-  };
+  }, [popularDestinations.length]);
 
-  const searchDestinations = async (query) => {
+  // Memoizar función de búsqueda de destinos
+  const searchDestinations = useCallback(async (query) => {
     if (!query || !query.trim()) {
       return [];
     }
@@ -607,7 +916,7 @@ function App() {
       setLoadingSearch(false);
     }
     return [];
-  };
+  }, []);
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
@@ -750,8 +1059,10 @@ function App() {
         
         // Si hay coincidencias en destinos populares, mostrarlas inmediatamente
         if (filteredPopular.length > 0) {
-          setDestinationSuggestions(filteredPopular.slice(0, 5));
-          setShowSuggestions(true);
+          startTransition(() => {
+            setDestinationSuggestions(filteredPopular.slice(0, 5));
+            setShowSuggestions(true);
+          });
         }
         
         // Luego, buscar con Gemini usando debounce (500ms)
@@ -760,25 +1071,33 @@ function App() {
           if (searchResults.length > 0) {
             // Combinar resultados de búsqueda con destinos populares filtrados
             const combined = [...new Set([...filteredPopular, ...searchResults])].slice(0, 5);
-            setDestinationSuggestions(combined);
-            setShowSuggestions(true);
+            startTransition(() => {
+              setDestinationSuggestions(combined);
+              setShowSuggestions(true);
+            });
           } else if (filteredPopular.length === 0) {
             // Si no hay resultados de ninguna fuente, ocultar sugerencias
-            setDestinationSuggestions([]);
-            setShowSuggestions(false);
+            startTransition(() => {
+              setDestinationSuggestions([]);
+              setShowSuggestions(false);
+            });
           }
         }, 500);
       } else {
         // Si no hay texto, mostrar los destinos populares (si están cargados)
         if (popularDestinations.length > 0) {
-          setDestinationSuggestions(popularDestinations.slice(0, 5));
-          setShowSuggestions(true);
+          startTransition(() => {
+            setDestinationSuggestions(popularDestinations.slice(0, 5));
+            setShowSuggestions(true);
+          });
         } else {
           // Si no hay destinos cargados, cargarlos
           loadPopularDestinations().then(destinations => {
             if (destinations.length > 0) {
-              setDestinationSuggestions(destinations.slice(0, 5));
-              setShowSuggestions(true);
+              startTransition(() => {
+                setDestinationSuggestions(destinations.slice(0, 5));
+                setShowSuggestions(true);
+              });
             }
           });
         }
@@ -786,20 +1105,23 @@ function App() {
     }
   };
 
-  const handleDestinationSelect = (destination) => {
+  // Memoizar función de selección de destino
+  const handleDestinationSelect = useCallback((destination) => {
     // Actualizar el formulario inmediatamente
-    setFormData(prev => ({
-      ...prev,
-      destination: destination
-    }));
-    setDestinationSuggestions([]);
-    setShowSuggestions(false);
-    setDestinationError('');
+    startTransition(() => {
+      setFormData(prev => ({
+        ...prev,
+        destination: destination
+      }));
+      setDestinationSuggestions([]);
+      setShowSuggestions(false);
+      setDestinationError('');
+    });
     
     // El destino ya fue pre-procesado cuando se buscó en /api/destinations/search
     // La información del clima ya está en cache del backend, lista para cuando se envíe el formulario
     console.log(`✅ Destino seleccionado: ${destination} (ya pre-procesado en búsqueda)`);
-  };
+  }, []);
 
   const validateDestination = (value) => {
     if (!value.trim()) {
@@ -1003,287 +1325,6 @@ function App() {
     });
   };
 
-  // Función para limpiar texto técnico innecesario
-  const cleanText = (text) => {
-    if (!text) return '';
-    
-    // Eliminar bloques de código markdown (```json, ```, etc.)
-    let cleaned = text
-      .replace(/```[\s\S]*?```/g, '') // Eliminar bloques de código completos
-      .replace(/```json\s*/gi, '') // Eliminar inicio de bloque json
-      .replace(/```\s*/g, '') // Eliminar cierres de bloque
-      .replace(/^\s*json\s*$/gmi, '') // Eliminar líneas que solo dicen "json"
-      .trim();
-    
-    // Eliminar líneas que solo contienen caracteres técnicos o están vacías
-    const lines = cleaned.split('\n')
-      .map(line => line.trim())
-      .filter(line => {
-        // Filtrar líneas vacías o que solo contienen caracteres técnicos
-        if (!line) return false;
-        // Eliminar líneas que son solo símbolos técnicos
-        if (/^[`{}[\],:;]+$/.test(line)) return false;
-        // Eliminar líneas que empiezan con caracteres técnicos comunes
-        if (/^[`{}\]\[,;:]/.test(line) && line.length < 10) return false;
-        return true;
-      });
-    
-    cleaned = lines.join('\n').trim();
-    
-    // Si después de limpiar no queda nada útil, retornar vacío
-    if (!cleaned || cleaned.length < 3) return '';
-    
-    return cleaned;
-  };
-
-  // Función para parsear las secciones de la respuesta
-  // El backend ahora genera respuestas en formato JSON estructurado
-  const parseResponseSections = (responseText) => {
-    if (!responseText) return null;
-
-    // Mapeo de nombres de secciones en JSON a nombres para mostrar
-    const sectionMapping = {
-      'alojamiento': 'ALOJAMIENTO',
-      'comida_local': 'COMIDA LOCAL',
-      'lugares_imperdibles': 'LUGARES IMPERDIBLES',
-      'consejos_locales': 'CONSEJOS LOCALES',
-      'estimacion_costos': 'ESTIMACIÓN DE COSTOS'
-    };
-
-    // Intentar extraer JSON de la respuesta
-    let jsonData = null;
-    let beforeText = '';
-    let afterText = '';
-
-    // Buscar JSON en la respuesta (puede venir con texto antes/después)
-    try {
-      // Intentar encontrar un bloque JSON
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const jsonStr = jsonMatch[0];
-        jsonData = JSON.parse(jsonStr);
-        
-        // Extraer texto antes y después del JSON
-        const jsonIndex = responseText.indexOf(jsonStr);
-        if (jsonIndex > 0) {
-          beforeText = cleanText(responseText.substring(0, jsonIndex));
-        }
-        const afterIndex = jsonIndex + jsonStr.length;
-        if (afterIndex < responseText.length) {
-          afterText = cleanText(responseText.substring(afterIndex));
-        }
-      } else {
-        // Si no hay JSON explícito, intentar parsear toda la respuesta como JSON
-        jsonData = JSON.parse(responseText);
-      }
-    } catch (error) {
-      // Si no es JSON válido, intentar parseo legacy (formato TOON)
-      console.warn('No se pudo parsear como JSON, intentando formato legacy:', error);
-      return parseResponseSectionsLegacy(responseText);
-    }
-
-    // Validar que jsonData sea un objeto con las secciones esperadas
-    if (!jsonData || typeof jsonData !== 'object') {
-      console.warn('JSON parseado no es un objeto válido');
-      return parseResponseSectionsLegacy(responseText);
-    }
-
-    // Convertir las secciones del JSON al formato esperado
-    const sections = {};
-    let hasSections = false;
-
-    for (const [jsonKey, displayName] of Object.entries(sectionMapping)) {
-      if (jsonData[jsonKey] && Array.isArray(jsonData[jsonKey])) {
-        // Convertir array a string con saltos de línea
-        sections[displayName] = jsonData[jsonKey]
-          .filter(item => item && typeof item === 'string' && item.trim())
-          .join('\n');
-        hasSections = true;
-      }
-    }
-
-    // Si no encontramos secciones válidas, intentar formato legacy
-    if (!hasSections) {
-      console.warn('No se encontraron secciones válidas en el JSON');
-      return parseResponseSectionsLegacy(responseText);
-    }
-
-    console.log('=== PARSING RESULT (JSON) ===');
-    console.log('Secciones detectadas:', Object.keys(sections));
-    
-    // Log detallado por sección
-    Object.keys(sections).forEach(section => {
-      const content = sections[section];
-      const contentLines = content.split('\n');
-      const nonEmptyLines = contentLines.filter(l => l.trim());
-      console.log(`\n${section}:`);
-      console.log(`  - Total recomendaciones: ${nonEmptyLines.length}`);
-      console.log(`  - Primeras 3 recomendaciones:`, nonEmptyLines.slice(0, 3));
-    });
-    
-    if (beforeText) {
-      console.log('\nTexto antes de JSON:', beforeText);
-    }
-    if (afterText) {
-      console.log('\nTexto después de JSON:', afterText);
-    }
-
-    return {
-      sections: sections,
-      beforeText: beforeText,
-      afterText: afterText
-    };
-  };
-
-  // Función de respaldo para parsear formato TOON legacy (por si acaso)
-  const parseResponseSectionsLegacy = (responseText) => {
-    const sections = {};
-    const sectionNames = [
-      'ALOJAMIENTO',
-      'COMIDA LOCAL',
-      'LUGARES IMPERDIBLES',
-      'CONSEJOS LOCALES',
-      'ESTIMACIÓN DE COSTOS'
-    ];
-
-    const lines = responseText.split('\n');
-    let currentSection = null;
-    let currentContent = [];
-    let beforeText = [];
-    let afterText = [];
-    let firstSectionIndex = -1;
-    let inSections = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i];
-      const trimmedLine = line.trim();
-      
-      if (!trimmedLine) {
-        if (currentSection) {
-          currentContent.push('');
-        } else if (!inSections) {
-          beforeText.push(line);
-        } else {
-          afterText.push(line);
-        }
-        continue;
-      }
-
-      let foundSection = false;
-      
-      for (const sectionName of sectionNames) {
-        const upperLine = trimmedLine.toUpperCase();
-        const normalizedSectionName = sectionName.replace(/\s+/g, ' ');
-        const normalizedLine = upperLine.replace(/\s+/g, ' ');
-        
-        if (normalizedLine.startsWith(normalizedSectionName)) {
-          const afterName = normalizedLine.substring(normalizedSectionName.length).trim();
-          const hasSeparator = afterName === '' || 
-                              afterName.startsWith('|') || 
-                              afterName.startsWith(':') ||
-                              /^\([^)]+\)\s*[|:]/.test(afterName);
-          
-          if (hasSeparator) {
-            if (currentSection) {
-              sections[currentSection] = currentContent.join('\n').trim();
-            }
-            
-            if (firstSectionIndex === -1) {
-              firstSectionIndex = i;
-              inSections = true;
-            }
-            
-            currentSection = sectionName;
-            currentContent = [];
-            foundSection = true;
-            
-            const sectionPattern = new RegExp(sectionName.replace(/\s+/g, '\\s*'), 'i');
-            const match = trimmedLine.match(sectionPattern);
-            
-            if (match) {
-              const afterMatch = trimmedLine.substring(match.index + match[0].length).trim();
-              if (afterMatch) {
-                let content = afterMatch.replace(/^\([^)]+\)\s*/, '');
-                content = content.replace(/^[|:\-]\s*/, '').trim();
-                if (content) {
-                  currentContent.push(content);
-                }
-              }
-            }
-            break;
-          }
-        }
-      }
-
-      if (!foundSection) {
-        if (currentSection) {
-          currentContent.push(line);
-        } else if (!inSections) {
-          beforeText.push(line);
-        } else {
-          afterText.push(line);
-        }
-      }
-    }
-
-    if (currentSection) {
-      sections[currentSection] = currentContent.join('\n').trim();
-    }
-
-    if (Object.keys(sections).length > 0) {
-      return {
-        sections: sections,
-        beforeText: beforeText.join('\n').trim(),
-        afterText: afterText.join('\n').trim()
-      };
-    }
-
-    return null;
-  };
-
-  // Función para parsear el mensaje del clima y extraer información
-  const parseWeatherInfo = (weatherText) => {
-    if (!weatherText) return null;
-    
-    // Extraer ciudad del formato: "🌤️ **Clima Actual en Ciudad, País:**"
-    // También manejar formato sin emoji: "**Clima Actual en Ciudad, País:**"
-    const cityMatch = weatherText.match(/(?:🌤️\s*)?\*\*Clima Actual en ([^:]+):\*\*/);
-    const city = cityMatch ? cityMatch[1].trim() : '';
-    
-    if (!city) return null; // Si no hay ciudad, no hay información válida
-    
-    // Extraer datos del clima (temperatura, condiciones, humedad, viento)
-    const lines = weatherText.split('\n').filter(line => {
-      const trimmed = line.trim();
-      return trimmed && (trimmed.includes('•') || trimmed.includes('T:') || trimmed.includes('Temperatura') || trimmed.includes('Condiciones') || trimmed.includes('Humedad') || trimmed.includes('Viento'));
-    });
-    
-    const weatherData = {
-      temperatura: '',
-      condiciones: '',
-      humedad: '',
-      viento: ''
-    };
-    
-    lines.forEach(line => {
-      const cleanLine = line.replace(/\*\*/g, '').replace(/🌤️/g, '').trim();
-      // Nuevo formato técnico: "T: -1.8°C / ST: -3.9°C"
-      if (cleanLine.includes('T:') && cleanLine.includes('ST:')) {
-        weatherData.temperatura = cleanLine.replace(/•\s*/, '').trim();
-      } else if (cleanLine.includes('Temperatura:')) {
-        // Formato legacy por si acaso
-        weatherData.temperatura = cleanLine.replace(/•\s*Temperatura:\s*/, '').replace(/Temperatura:\s*/, '').trim();
-      } else if (cleanLine.includes('Condiciones:')) {
-        weatherData.condiciones = cleanLine.replace(/•\s*Condiciones:\s*/, '').replace(/Condiciones:\s*/, '').trim();
-      } else if (cleanLine.includes('Humedad:')) {
-        weatherData.humedad = cleanLine.replace(/•\s*Humedad:\s*/, '').replace(/Humedad:\s*/, '').trim();
-      } else if (cleanLine.includes('Viento:')) {
-        weatherData.viento = cleanLine.replace(/•\s*Viento:\s*/, '').replace(/Viento:\s*/, '').trim();
-      }
-    });
-    
-    return { city, ...weatherData };
-  };
 
   // Función para obtener el icono según la sección
   const getSectionIcon = (sectionName) => {
@@ -1406,25 +1447,33 @@ function App() {
                         );
                         
                         if (filtered.length > 0) {
-                          setDestinationSuggestions(filtered.slice(0, 5));
-                          setShowSuggestions(true);
+                          startTransition(() => {
+                            setDestinationSuggestions(filtered.slice(0, 5));
+                            setShowSuggestions(true);
+                          });
                         }
                         
                         // Buscar con Gemini
                         const searchResults = await searchDestinations(formData.destination);
                         if (searchResults.length > 0) {
                           const combined = [...new Set([...filtered, ...searchResults])].slice(0, 5);
-                          setDestinationSuggestions(combined);
-                          setShowSuggestions(true);
+                          startTransition(() => {
+                            setDestinationSuggestions(combined);
+                            setShowSuggestions(true);
+                          });
                         } else if (filtered.length > 0) {
-                          setDestinationSuggestions(filtered.slice(0, 5));
-                          setShowSuggestions(true);
+                          startTransition(() => {
+                            setDestinationSuggestions(filtered.slice(0, 5));
+                            setShowSuggestions(true);
+                          });
                         }
                       } else {
                         // Si no hay texto, mostrar los destinos populares
                         if (destinations.length > 0) {
-                          setDestinationSuggestions(destinations.slice(0, 5));
-                          setShowSuggestions(true);
+                          startTransition(() => {
+                            setDestinationSuggestions(destinations.slice(0, 5));
+                            setShowSuggestions(true);
+                          });
                         }
                       }
                     }}
@@ -1516,15 +1565,15 @@ function App() {
                   </div>
                 </div>
 
-                {tripType === 'closed' && formData.departureDate && formData.returnDate && (
+                {tripType === 'closed' && formData.departureDate && formData.returnDate && calculatedDays !== null && (
                   <div className="days-info-row">
-                    {calculateDays(formData.departureDate, formData.returnDate) > 30 ? (
+                    {calculatedDays > 30 ? (
                       <span className="long-trip-warning-inline">
                         Viaje largo: más de 30 días. Asegúrate de tener suficiente presupuesto y documentación.
                       </span>
                     ) : (
                       <span className="days-info-text">
-                        {calculateDays(formData.departureDate, formData.returnDate)} {calculateDays(formData.departureDate, formData.returnDate) === 1 ? 'día' : 'días'} de viaje
+                        {calculatedDays} {calculatedDays === 1 ? 'día' : 'días'} de viaje
                       </span>
                     )}
                   </div>
@@ -1944,7 +1993,7 @@ function App() {
           </form>
 
           {response && (() => {
-            const parsed = parseResponseSections(response);
+            const parsed = parsedResponse;
             
             if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
               // Mostrar carrusel si hay secciones
@@ -1971,8 +2020,6 @@ function App() {
               }
 
               const hasMultipleSections = sectionKeys.length > 1;
-
-              const weatherInfo = weather ? parseWeatherInfo(weather) : null;
 
               return (
                 <div className="response-container">
@@ -2144,7 +2191,6 @@ function App() {
               );
             } else {
               // Mostrar respuesta normal si no hay secciones
-              const weatherInfo = weather ? parseWeatherInfo(weather) : null;
               
               return (
                 <div className="response-container">
