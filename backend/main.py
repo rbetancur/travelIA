@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import google.generativeai as genai
 import os
 from prompts import load_prompt
+from weather import WeatherService, extract_destination_from_question, parse_form_destination
+from unsplash import UnsplashService
+from realtime_info import RealtimeInfoService
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -61,6 +64,50 @@ else:
     print(f"✅ API Key de Gemini configurada ({masked_key})")
     genai.configure(api_key=GEMINI_API_KEY)
 
+# Inicializar servicio de clima
+weather_service = WeatherService()
+if weather_service.is_available():
+    masked_weather_key = f"{weather_service.api_key[:10]}...{weather_service.api_key[-4:]}" if len(weather_service.api_key) > 14 else "***"
+    print(f"✅ API Key de OpenWeatherMap configurada ({masked_weather_key})")
+    
+    # Validar la API key al inicio
+    print("🔍 Validando API key de OpenWeatherMap...")
+    is_valid, error_msg = weather_service.validate_api_key()
+    if is_valid:
+        print("✅ API key de OpenWeatherMap válida y funcionando")
+    else:
+        print(f"❌ API key de OpenWeatherMap no válida: {error_msg}")
+        print("   El clima no estará disponible hasta que corrijas la API key")
+        print("   Verifica en: https://home.openweathermap.org/api_keys")
+else:
+    print("⚠️  ADVERTENCIA: OPENWEATHER_API_KEY no encontrada")
+    print("   El clima no estará disponible. Configura la variable de entorno OPENWEATHER_API_KEY")
+    print("   Ver SECRETS.md para más detalles")
+
+# Inicializar servicio de Unsplash
+unsplash_service = UnsplashService()
+if unsplash_service.is_available():
+    masked_unsplash_key = f"{unsplash_service.api_key[:10]}...{unsplash_service.api_key[-4:]}" if len(unsplash_service.api_key) > 14 else "***"
+    print(f"✅ API Key de Unsplash configurada ({masked_unsplash_key})")
+    
+    # Validar la API key al inicio
+    print("🔍 Validando API key de Unsplash...")
+    is_valid, error_msg = unsplash_service.validate_api_key()
+    if is_valid:
+        print("✅ API key de Unsplash válida y funcionando")
+    else:
+        print(f"❌ API key de Unsplash no válida: {error_msg}")
+        print("   Las fotos no estarán disponibles hasta que corrijas la API key")
+        print("   Verifica en: https://unsplash.com/developers")
+else:
+    print("⚠️  ADVERTENCIA: UNSPLASH_API_KEY no encontrada")
+    print("   Las fotos no estarán disponibles. Configura la variable de entorno UNSPLASH_API_KEY")
+    print("   Ver SECRETS.md para más detalles")
+
+# Inicializar servicio de información en tiempo real
+realtime_info_service = RealtimeInfoService()
+print("✅ Servicio de información en tiempo real inicializado")
+
 # Configurar CORS para permitir requests del frontend
 app.add_middleware(
     CORSMiddleware,
@@ -73,10 +120,13 @@ app.add_middleware(
 
 class TravelQuery(BaseModel):
     question: str
+    destination: Optional[str] = None  # Destino del formulario (formato: "Ciudad, País")
 
 
 class TravelResponse(BaseModel):
     answer: str
+    weather: Optional[str] = None
+    photos: Optional[List[Dict[str, Any]]] = None
 
 
 class DestinationsResponse(BaseModel):
@@ -174,7 +224,57 @@ async def plan_travel(query: TravelQuery):
                 detail="La respuesta de Gemini está vacía o en formato inesperado"
             )
         
-        return TravelResponse(answer=response_text)
+        # Intentar obtener el clima y fotos del destino si está disponible
+        weather_message = None
+        photos = None
+        
+        # Prioridad 1: Usar destino del formulario si está disponible
+        destination = None
+        destination_string = None
+        
+        if query.destination:
+            destination = parse_form_destination(query.destination)
+            if destination:
+                destination_string = query.destination
+                print(f"📍 Usando destino del formulario: {query.destination}")
+        
+        # Prioridad 2: Extraer destino del texto de la pregunta si no hay destino del formulario
+        if not destination:
+            destination = extract_destination_from_question(query.question)
+            if destination:
+                city, country = destination
+                destination_string = f"{city}, {country}"
+                print(f"📍 Destino extraído del texto de la pregunta: {destination_string}")
+        
+        if destination_string:
+            # Obtener clima
+            if weather_service.is_available():
+                city, country = destination if destination else (None, None)
+                if city and country:
+                    print(f"🌤️ Intentando obtener clima para: {city}, {country}")
+                    weather_data = weather_service.get_weather(city, country)
+                    if weather_data:
+                        weather_message = weather_service.format_weather_message(weather_data)
+                        print(f"✅ Clima obtenido exitosamente")
+                    else:
+                        print(f"❌ No se pudo obtener el clima para {city}, {country}")
+            
+            # Obtener fotos
+            if unsplash_service.is_available():
+                print(f"📸 Intentando obtener fotos para: {destination_string}")
+                photos = unsplash_service.get_photos(destination_string, count=3)
+                if photos:
+                    print(f"✅ {len(photos)} fotos obtenidas exitosamente")
+                else:
+                    print(f"❌ No se pudo obtener fotos para {destination_string}")
+            else:
+                print(f"⚠️ Servicio de fotos no disponible (API key no configurada)")
+        else:
+            print(f"⚠️ No se pudo obtener el destino (ni del formulario ni del texto)")
+            if not weather_service.is_available():
+                print(f"⚠️ Servicio de clima no disponible (API key no configurada)")
+        
+        return TravelResponse(answer=response_text, weather=weather_message, photos=photos)
         
     except HTTPException:
         # Re-lanzar excepciones HTTP directamente
@@ -258,6 +358,22 @@ async def get_popular_destinations():
         # Validar y limitar a 5 destinos
         if destinations and len(destinations) > 0:
             destinations = destinations[:5]
+            
+            # Pre-procesar destinos para preparar información del clima
+            # Esto parsea cada destino y obtiene códigos ISO usando Gemini (con cache)
+            from weather import parse_form_destination
+            
+            for dest in destinations:
+                try:
+                    # Parsear destino (esto obtiene código ISO con Gemini si no está en cache)
+                    parsed = parse_form_destination(dest)
+                    if parsed:
+                        city, country_code = parsed
+                        print(f"✅ Destino popular pre-procesado para cache: {dest} → ({city}, {country_code})")
+                except Exception as e:
+                    # No fallar si hay error en pre-procesamiento, es solo optimización
+                    print(f"⚠️ Error al pre-procesar destino popular {dest}: {e}")
+            
             return DestinationsResponse(destinations=destinations)
         
         # Si falla el parseo, devolver destinos por defecto
@@ -268,6 +384,18 @@ async def get_popular_destinations():
             "Bali, Indonesia",
             "Barcelona, España"
         ]
+        
+        # Pre-procesar destinos por defecto también
+        from weather import parse_form_destination
+        for dest in default_destinations:
+            try:
+                parsed = parse_form_destination(dest)
+                if parsed:
+                    city, country_code = parsed
+                    print(f"✅ Destino por defecto pre-procesado para cache: {dest} → ({city}, {country_code})")
+            except Exception as e:
+                print(f"⚠️ Error al pre-procesar destino por defecto {dest}: {e}")
+        
         return DestinationsResponse(destinations=default_destinations)
         
     except HTTPException:
@@ -287,6 +415,18 @@ async def get_popular_destinations():
             "Bali, Indonesia",
             "Barcelona, España"
         ]
+        
+        # Pre-procesar destinos por defecto también
+        from weather import parse_form_destination
+        for dest in default_destinations:
+            try:
+                parsed = parse_form_destination(dest)
+                if parsed:
+                    city, country_code = parsed
+                    print(f"✅ Destino por defecto (error) pre-procesado para cache: {dest} → ({city}, {country_code})")
+            except Exception as e:
+                print(f"⚠️ Error al pre-procesar destino por defecto {dest}: {e}")
+        
         return DestinationsResponse(destinations=default_destinations)
 
 
@@ -358,6 +498,24 @@ async def search_destinations(search_query: DestinationSearchQuery):
         # Validar y limitar a 5 destinos
         if destinations and len(destinations) > 0:
             destinations = destinations[:5]
+            
+            # Pre-procesar destinos para preparar información del clima
+            # Esto parsea cada destino y obtiene códigos ISO usando Gemini (con cache)
+            # Como usa cache, es rápido y no bloquea significativamente la respuesta
+            from weather import parse_form_destination
+            
+            for dest in destinations:
+                try:
+                    # Parsear destino (esto obtiene código ISO con Gemini si no está en cache)
+                    # Si ya está en cache, es instantáneo
+                    parsed = parse_form_destination(dest)
+                    if parsed:
+                        city, country_code = parsed
+                        print(f"✅ Destino pre-procesado para cache: {dest} → ({city}, {country_code})")
+                except Exception as e:
+                    # No fallar si hay error en pre-procesamiento, es solo optimización
+                    print(f"⚠️ Error al pre-procesar destino {dest}: {e}")
+            
             return DestinationsResponse(destinations=destinations)
         
         # Si falla el parseo, devolver lista vacía
@@ -379,4 +537,106 @@ async def search_destinations(search_query: DestinationSearchQuery):
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/api/weather/cache/stats")
+def get_weather_cache_stats():
+    """
+    Endpoint para obtener estadísticas del cache de clima.
+    """
+    if not weather_service.is_available():
+        return {
+            "error": "Servicio de clima no disponible",
+            "cache_stats": None
+        }
+    
+    stats = weather_service.cache.get_stats()
+    return {
+        "cache_stats": stats,
+        "api_available": not weather_service.api_unavailable
+    }
+
+
+@app.post("/api/weather/cache/clear")
+def clear_weather_cache():
+    """
+    Endpoint para limpiar el cache de clima.
+    """
+    if not weather_service.is_available():
+        return {
+            "error": "Servicio de clima no disponible",
+            "cleared": False
+        }
+    
+    weather_service.cache.clear()
+    return {
+        "message": "Cache limpiado exitosamente",
+        "cleared": True
+    }
+
+
+@app.get("/api/weather/country-codes/stats")
+def get_country_code_cache_stats():
+    """
+    Endpoint para obtener estadísticas del cache de códigos de países.
+    """
+    from weather import _country_code_cache
+    stats = _country_code_cache.get_stats()
+    return {
+        "cache_stats": stats
+    }
+
+
+@app.post("/api/weather/country-codes/clear")
+def clear_country_code_cache():
+    """
+    Endpoint para limpiar el cache de códigos de países.
+    """
+    from weather import _country_code_cache
+    _country_code_cache.clear()
+    return {
+        "message": "Cache de códigos de países limpiado exitosamente",
+        "cleared": True
+    }
+
+
+class RealtimeInfoQuery(BaseModel):
+    destination: str  # Destino en formato "Ciudad, País"
+
+
+@app.post("/api/realtime-info")
+async def get_realtime_info(query: RealtimeInfoQuery):
+    """
+    Endpoint para obtener información en tiempo real de un destino:
+    - Tipo de cambio de moneda
+    - Diferencia horaria
+    - Temperatura actual
+    """
+    try:
+        if not query.destination or not query.destination.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="El destino es requerido"
+            )
+        
+        info = realtime_info_service.get_realtime_info(query.destination)
+        
+        if not info:
+            raise HTTPException(
+                status_code=404,
+                detail="No se pudo obtener información para el destino especificado"
+            )
+        
+        return info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_type = type(e).__name__
+        error_message = str(e) if str(e) else "Error desconocido"
+        full_error = f"Error al obtener información en tiempo real ({error_type}): {error_message}"
+        print(f"Error completo: {full_error}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=full_error)
 

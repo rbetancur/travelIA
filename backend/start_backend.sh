@@ -4,12 +4,23 @@
 
 # Cargar variables de entorno del .zshrc si existe
 if [ -f ~/.zshrc ]; then
-    source ~/.zshrc
+    # Cargar solo las variables de entorno, evitando errores de compdef
+    set -a
+    source ~/.zshrc 2>/dev/null || true
+    set +a
 fi
 
 # Cargar variables de entorno del .bash_profile si existe (fallback)
 if [ -f ~/.bash_profile ]; then
-    source ~/.bash_profile
+    set -a
+    source ~/.bash_profile 2>/dev/null || true
+    set +a
+fi
+
+# Cargar variables de entorno explícitamente si no están cargadas
+# Esto es un fallback en caso de que source no funcione correctamente
+if [ -z "$UNSPLASH_API_KEY" ] && [ -f ~/.zshrc ]; then
+    export UNSPLASH_API_KEY=$(grep "^export UNSPLASH_API_KEY=" ~/.zshrc | cut -d'=' -f2 | tr -d '"' | tr -d "'" | head -1)
 fi
 
 # Activar el entorno virtual

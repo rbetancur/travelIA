@@ -157,11 +157,150 @@
   background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
   color: white;
   padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.response-header-left {
+  flex: 1;
 }
 
 .response-header h2 {
   font-size: 1.3rem;
   font-weight: 600;
+  margin: 0;
+}
+
+.response-header-right {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 20px;
+}
+
+.weather-header-container {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0;
+}
+
+.weather-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.weather-main-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+  width: 28px;
+  height: 28px;
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+.weather-header-left-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  align-items: center;
+}
+
+.weather-label {
+  font-size: 0.65rem;
+  opacity: 0.85;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.weather-city {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.weather-header-divider {
+  width: 1px;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.weather-header-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  min-width: 160px;
+}
+
+.weather-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.weather-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  opacity: 0.95;
+}
+
+.weather-detail-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+  width: 12px;
+  height: 12px;
+}
+
+/* Responsive: En pantallas pequeñas, el clima se muestra debajo del título */
+@media (max-width: 768px) {
+  .response-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .response-header-right {
+    width: 100%;
+  }
+  
+  .weather-header-container {
+    width: 100%;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  
+  .weather-header-left {
+    min-width: auto;
+  }
+  
+  .weather-header-right {
+    min-width: auto;
+    flex: 1;
+  }
+  
+  .weather-header-divider {
+    height: 40px;
+  }
+  
+  .weather-city {
+    font-size: 1rem;
+  }
 }
 
 .response-content {
@@ -169,6 +308,121 @@
   background: white;
   color: #1f2937;
   line-height: 1.7;
+}
+
+/* Destination Photos Styles */
+.destination-photos-container {
+  margin-bottom: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.destination-photos-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.photos-icon {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.destination-photos-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.destination-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.destination-photo-item {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.destination-photo-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.destination-photo-link {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  text-decoration: none;
+  color: inherit;
+}
+
+.destination-photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.destination-photo-item:hover .destination-photo-image {
+  transform: scale(1.05);
+}
+
+.destination-photo-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  padding: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.destination-photo-item:hover .destination-photo-overlay {
+  opacity: 1;
+}
+
+.destination-photo-credit {
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Responsive: En pantallas pequeñas, mostrar 1 foto por fila */
+@media (max-width: 768px) {
+  .destination-photos-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .destination-photos-container {
+    padding: 16px 0;
+  }
+  
+  .destination-photos-title {
+    font-size: 1.1rem;
+  }
+}
+
+/* En pantallas medianas, mostrar 2 fotos */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .destination-photos-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .response-content p {
@@ -2249,5 +2503,318 @@
     width: 7px;
     height: 7px;
   }
+}
+
+/* Layout principal - siempre centrado */
+.app-layout {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0;
+  display: block;
+  position: relative; /* Para que el panel flotante no lo afecte */
+}
+
+.app-layout .container {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  position: relative; /* Asegura que esté en el flow normal del documento */
+}
+
+/* Contenedor para botón y panel flotante - no afecta el layout */
+.realtime-info-wrapper {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  z-index: 1000;
+}
+
+/* Botón flotante para información en tiempo real */
+.realtime-info-float-button {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4);
+  transition: all 0.3s ease;
+  color: white;
+  position: relative;
+}
+
+.realtime-info-float-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.5);
+}
+
+.realtime-live-icon {
+  position: relative;
+  z-index: 2;
+  animation: pulseIcon 2s ease-in-out infinite;
+}
+
+@keyframes pulseIcon {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.realtime-pulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.4);
+  animation: pulseRing 2s ease-out infinite;
+  z-index: 1;
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Panel flotante de información en tiempo real */
+.realtime-info-panel-float {
+  position: absolute;
+  bottom: 80px;
+  right: 0;
+  width: 360px;
+  max-width: calc(100vw - 60px);
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 24px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  animation: slideUpFade 0.3s ease-out;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Panel lateral de información en tiempo real (legacy, mantener por compatibilidad) */
+.realtime-info-panel {
+  width: 320px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 24px;
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.realtime-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.realtime-info-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.realtime-info-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.realtime-info-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.realtime-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.realtime-info-item {
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.realtime-info-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.realtime-info-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.realtime-info-icon {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.realtime-info-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.realtime-info-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.exchange-rate-main {
+  margin-bottom: 4px;
+  color: #2563eb;
+}
+
+.exchange-rate-secondary {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.time-difference-main {
+  font-size: 1.5rem;
+  color: #2563eb;
+  margin-bottom: 4px;
+}
+
+.time-difference-secondary {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.realtime-info-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: #64748b;
+}
+
+.realtime-info-empty svg {
+  margin-bottom: 12px;
+  color: #94a3b8;
+}
+
+.realtime-info-empty p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* Responsive: ajustar panel flotante en pantallas pequeñas */
+@media (max-width: 768px) {
+  .realtime-info-wrapper {
+    bottom: 20px;
+    right: 20px;
+  }
+  
+  .realtime-info-float-button {
+    width: 56px;
+    height: 56px;
+  }
+  
+  .realtime-info-panel-float {
+    bottom: 70px;
+    right: 0;
+    left: auto;
+    width: calc(100vw - 40px);
+    max-width: none;
+  }
+}
+
+/* Responsive: ocultar panel en pantallas pequeñas */
+@media (max-width: 1024px) {
+  .app-layout {
+    flex-direction: column;
+  }
+  
+  .realtime-info-panel {
+    width: 100%;
+    position: relative;
+    top: 0;
+    max-height: none;
+  }
+}
+
+/* Scrollbar personalizado para el panel */
+.realtime-info-panel::-webkit-scrollbar,
+.realtime-info-panel-float::-webkit-scrollbar {
+  width: 6px;
+}
+
+.realtime-info-panel::-webkit-scrollbar-track,
+.realtime-info-panel-float::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+.realtime-info-panel::-webkit-scrollbar-thumb,
+.realtime-info-panel-float::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.realtime-info-panel::-webkit-scrollbar-thumb:hover,
+.realtime-info-panel-float::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
