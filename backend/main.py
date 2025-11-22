@@ -7,6 +7,7 @@ import os
 from prompts import load_prompt
 from weather import WeatherService, extract_destination_from_question, parse_form_destination
 from unsplash import UnsplashService
+from realtime_info import RealtimeInfoService
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -102,6 +103,10 @@ else:
     print("⚠️  ADVERTENCIA: UNSPLASH_API_KEY no encontrada")
     print("   Las fotos no estarán disponibles. Configura la variable de entorno UNSPLASH_API_KEY")
     print("   Ver SECRETS.md para más detalles")
+
+# Inicializar servicio de información en tiempo real
+realtime_info_service = RealtimeInfoService()
+print("✅ Servicio de información en tiempo real inicializado")
 
 # Configurar CORS para permitir requests del frontend
 app.add_middleware(
@@ -593,4 +598,45 @@ def clear_country_code_cache():
         "message": "Cache de códigos de países limpiado exitosamente",
         "cleared": True
     }
+
+
+class RealtimeInfoQuery(BaseModel):
+    destination: str  # Destino en formato "Ciudad, País"
+
+
+@app.post("/api/realtime-info")
+async def get_realtime_info(query: RealtimeInfoQuery):
+    """
+    Endpoint para obtener información en tiempo real de un destino:
+    - Tipo de cambio de moneda
+    - Diferencia horaria
+    - Temperatura actual
+    """
+    try:
+        if not query.destination or not query.destination.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="El destino es requerido"
+            )
+        
+        info = realtime_info_service.get_realtime_info(query.destination)
+        
+        if not info:
+            raise HTTPException(
+                status_code=404,
+                detail="No se pudo obtener información para el destino especificado"
+            )
+        
+        return info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_type = type(e).__name__
+        error_message = str(e) if str(e) else "Error desconocido"
+        full_error = f"Error al obtener información en tiempo real ({error_type}): {error_message}"
+        print(f"Error completo: {full_error}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=full_error)
 

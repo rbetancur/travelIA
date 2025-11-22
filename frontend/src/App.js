@@ -28,7 +28,10 @@ import {
   Thermometer,
   Droplets,
   Wind,
-  Image
+  Image,
+  Clock,
+  Globe,
+  Radio
 } from 'lucide-react';
 import './App.css';
 
@@ -67,6 +70,9 @@ function App() {
   const [weather, setWeather] = useState(null);
   const [photos, setPhotos] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [realtimeInfo, setRealtimeInfo] = useState(null);
+  const [loadingRealtimeInfo, setLoadingRealtimeInfo] = useState(false);
+  const [showRealtimePanel, setShowRealtimePanel] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [carouselDirection, setCarouselDirection] = useState('right');
   const contentScrollRef = useRef(null);
@@ -918,6 +924,29 @@ function App() {
     return [];
   }, []);
 
+  // Función para obtener información en tiempo real
+  const fetchRealtimeInfo = useCallback(async (destination) => {
+    if (!destination || !destination.trim()) {
+      return;
+    }
+
+    setLoadingRealtimeInfo(true);
+    try {
+      const result = await axios.post(`${API_URL}/api/realtime-info`, {
+        destination: destination.trim()
+      });
+      if (result.data) {
+        setRealtimeInfo(result.data);
+        console.log('📊 Información en tiempo real recibida:', result.data);
+      }
+    } catch (error) {
+      console.error('Error al obtener información en tiempo real:', error);
+      setRealtimeInfo(null);
+    } finally {
+      setLoadingRealtimeInfo(false);
+    }
+  }, []);
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     
@@ -982,6 +1011,7 @@ function App() {
     setResponse('');
     setWeather(null);
     setPhotos(null);
+    setRealtimeInfo(null);
     setCarouselIndex(0);
     
     // Guardar los datos actuales para la próxima comparación
@@ -999,6 +1029,11 @@ function App() {
       setPhotos(result.data.photos || null);
       console.log('🌤️ Clima recibido (formulario):', result.data.weather);
       console.log('📸 Fotos recibidas (formulario):', result.data.photos);
+      
+      // Obtener información en tiempo real
+      if (formData.destination) {
+        fetchRealtimeInfo(formData.destination);
+      }
     } catch (error) {
       console.error('Error:', error);
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
@@ -1372,6 +1407,7 @@ function App() {
     setResponse('');
     setWeather(null);
     setPhotos(null);
+    setRealtimeInfo(null);
     setCarouselIndex(0);
 
     try {
@@ -1384,6 +1420,9 @@ function App() {
       setPhotos(result.data.photos || null);
       console.log('🌤️ Clima recibido (pregunta directa):', result.data.weather);
       console.log('📸 Fotos recibidas (pregunta directa):', result.data.photos);
+      
+      // Intentar extraer destino de la pregunta para obtener información en tiempo real
+      // Por ahora, no lo hacemos para preguntas directas ya que puede no tener destino claro
     } catch (error) {
       console.error('Error:', error);
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
@@ -1939,8 +1978,9 @@ function App() {
 
   return (
     <div className="App">
-      <div className="container">
-        <header className="header">
+      <div className="app-layout">
+        <div className="container">
+          <header className="header">
           <button 
             type="button"
             onClick={() => setShowForm(true)}
@@ -2291,6 +2331,112 @@ function App() {
             }
           })()}
         </main>
+        </div>
+        
+        {/* Botón flotante para información en tiempo real */}
+        {realtimeInfo && !showForm && (
+          <div className="realtime-info-wrapper">
+            <button
+              type="button"
+              className="realtime-info-float-button"
+              onClick={() => setShowRealtimePanel(!showRealtimePanel)}
+              onMouseEnter={() => setShowRealtimePanel(true)}
+              aria-label="Ver información en tiempo real"
+              title="Información en tiempo real"
+            >
+              <Radio size={24} className="realtime-live-icon" />
+              <span className="realtime-pulse"></span>
+            </button>
+            
+            {/* Panel flotante de información en tiempo real */}
+            {showRealtimePanel && (
+              <div 
+                className="realtime-info-panel-float"
+                onMouseEnter={() => setShowRealtimePanel(true)}
+                onMouseLeave={() => setShowRealtimePanel(false)}
+              >
+                <div className="realtime-info-header">
+                  <h3 className="realtime-info-title">Información en Tiempo Real</h3>
+                  <button
+                    type="button"
+                    className="realtime-info-close"
+                    onClick={() => setShowRealtimePanel(false)}
+                    aria-label="Cerrar panel"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+            
+            <div className="realtime-info-content">
+              {/* Temperatura */}
+              {realtimeInfo.temperature !== null && realtimeInfo.temperature !== undefined && (
+                <div className="realtime-info-item">
+                  <div className="realtime-info-item-header">
+                    <Thermometer size={20} className="realtime-info-icon" />
+                    <span className="realtime-info-label">Temperatura Actual</span>
+                  </div>
+                  <div className="realtime-info-value">
+                    {realtimeInfo.temperature}°C
+                  </div>
+                </div>
+              )}
+              
+              {/* Tipo de cambio */}
+              {realtimeInfo.exchange_rate && (
+                <div className="realtime-info-item">
+                  <div className="realtime-info-item-header">
+                    <DollarSign size={20} className="realtime-info-icon" />
+                    <span className="realtime-info-label">Tipo de Cambio</span>
+                  </div>
+                  <div className="realtime-info-value">
+                    {realtimeInfo.exchange_rate.currency_code && (
+                      <>
+                        <div className="exchange-rate-main">
+                          1 USD = {realtimeInfo.exchange_rate.usd_to_dest} {realtimeInfo.exchange_rate.currency_code}
+                        </div>
+                        {realtimeInfo.exchange_rate.dest_to_usd && (
+                          <div className="exchange-rate-secondary">
+                            1 {realtimeInfo.exchange_rate.currency_code} = {realtimeInfo.exchange_rate.dest_to_usd} USD
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Diferencia horaria */}
+              {realtimeInfo.time_difference && (
+                <div className="realtime-info-item">
+                  <div className="realtime-info-item-header">
+                    <Clock size={20} className="realtime-info-icon" />
+                    <span className="realtime-info-label">Diferencia Horaria</span>
+                  </div>
+                  <div className="realtime-info-value">
+                    <div className="time-difference-main">
+                      {realtimeInfo.time_difference.difference_string}
+                    </div>
+                    {realtimeInfo.time_difference.destination_time && (
+                      <div className="time-difference-secondary">
+                        Hora local: {realtimeInfo.time_difference.destination_time}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Mensaje si no hay información disponible */}
+              {!realtimeInfo.temperature && !realtimeInfo.exchange_rate && !realtimeInfo.time_difference && (
+                <div className="realtime-info-empty">
+                  <AlertCircle size={20} />
+                  <p>No hay información disponible para este destino</p>
+                </div>
+              )}
+            </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
