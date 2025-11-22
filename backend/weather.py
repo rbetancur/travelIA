@@ -5,6 +5,11 @@ import os
 import requests
 from typing import Optional, Dict, Any
 from weather_cache import WeatherCache
+from country_code_cache import CountryCodeCache
+import google.generativeai as genai
+
+# Cache global para códigos de países
+_country_code_cache = CountryCodeCache()
 
 
 class WeatherService:
@@ -210,7 +215,7 @@ class WeatherService:
         ubicacion = f"{ciudad}, {pais}" if pais else ciudad
         
         mensaje = f"🌤️ **Clima Actual en {ubicacion}:**\n"
-        mensaje += f"• Temperatura: {temp}°C (sensación térmica: {sensacion}°C)\n"
+        mensaje += f"• T: {temp}°C / ST: {sensacion}°C\n"
         mensaje += f"• Condiciones: {descripcion}\n"
         mensaje += f"• Humedad: {humedad}%\n"
         
@@ -259,6 +264,139 @@ class WeatherService:
             return (False, f"Error de conexión: {str(e)}")
         except Exception as e:
             return (False, f"Error inesperado: {str(e)}")
+
+
+def get_country_code_with_gemini(country_name: str) -> Optional[str]:
+    """
+    Obtiene el código ISO de un país usando Gemini AI.
+    Primero busca en cache, si no está, consulta a Gemini.
+    
+    Args:
+        country_name: Nombre del país
+        
+    Returns:
+        Código ISO del país (ej: "ES", "FR", "US") o None si no se encuentra
+    """
+    if not country_name or not country_name.strip():
+        return None
+    
+    country_name = country_name.strip()
+    
+    # 1. Buscar primero en cache
+    cached_code = _country_code_cache.get(country_name)
+    if cached_code is not None:
+        return cached_code
+    
+    # 2. Si no está en cache, consultar a Gemini
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        print(f"⚠️ GEMINI_API_KEY no configurada, no se puede obtener código para '{country_name}'")
+        _country_code_cache.set(country_name, None)  # Guardar None en cache para no intentar de nuevo
+        return None
+    
+    try:
+        # Configurar Gemini
+        genai.configure(api_key=gemini_api_key)
+        
+        # Modelo gratuito
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        model = genai.GenerativeModel(model_name)
+        
+        # Prompt optimizado para obtener código ISO
+        prompt = f"""Dado el nombre de un país, devuelve SOLO su código ISO 3166-1 alpha-2 (2 letras).
+
+País: {country_name}
+
+Responde ÚNICAMENTE con el código ISO de 2 letras en mayúsculas, sin explicaciones, sin puntos, sin espacios.
+Si no conoces el país o no existe, responde exactamente: NOT_FOUND
+
+Ejemplos:
+- España → ES
+- France → FR
+- United States → US
+- Japan → JP
+- Países que no existen → NOT_FOUND"""
+        
+        print(f"🤖 Consultando Gemini para código ISO de '{country_name}'...")
+        response = model.generate_content(prompt)
+        
+        # Extraer el texto de la respuesta
+        response_text = None
+        if hasattr(response, 'text') and response.text:
+            response_text = response.text.strip()
+        elif hasattr(response, 'candidates') and response.candidates:
+            if len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    parts = candidate.content.parts
+                    if parts and len(parts) > 0:
+                        response_text = parts[0].text.strip() if hasattr(parts[0], 'text') else str(parts[0]).strip()
+        
+        if not response_text:
+            print(f"⚠️ Gemini no devolvió respuesta para '{country_name}'")
+            _country_code_cache.set(country_name, None)
+            return None
+        
+        # Limpiar la respuesta (eliminar espacios, puntos, etc.)
+        response_text = response_text.strip().upper().replace('.', '').replace(' ', '')
+        
+        # Validar que sea un código ISO válido (2 letras) o NOT_FOUND
+        if response_text == "NOT_FOUND" or len(response_text) != 2 or not response_text.isalpha():
+            print(f"⚠️ Gemini no encontró código ISO para '{country_name}' (respuesta: {response_text})")
+            _country_code_cache.set(country_name, None)
+            return None
+        
+        # Guardar en cache y retornar
+        print(f"✅ Gemini devolvió código ISO: {country_name} → {response_text}")
+        _country_code_cache.set(country_name, response_text)
+        return response_text
+        
+    except Exception as e:
+        print(f"❌ Error al consultar Gemini para código de '{country_name}': {e}")
+        _country_code_cache.set(country_name, None)  # Guardar None para no intentar de nuevo
+        return None
+
+
+def parse_form_destination(destination: str) -> Optional[tuple[str, Optional[str]]]:
+    """
+    Parsea el destino del formulario que viene en formato "Ciudad, País".
+    Usa Gemini para obtener códigos ISO de países con cache.
+    
+    Args:
+        destination: Destino del formulario en formato "Ciudad, País"
+        
+    Returns:
+        Tupla (ciudad, código_país) o None si no se puede parsear
+    """
+    if not destination or not destination.strip():
+        return None
+    
+    destination = destination.strip()
+    
+    # Intentar dividir por coma
+    if ',' in destination:
+        parts = destination.split(',', 1)
+        city = parts[0].strip()
+        country_name = parts[1].strip() if len(parts) > 1 else None
+        
+        if country_name:
+            # Obtener código de país usando Gemini (con cache)
+            country_code = get_country_code_with_gemini(country_name)
+            if country_code:
+                print(f"✅ Destino del formulario parseado: {city}, {country_code}")
+                return (city, country_code)
+            else:
+                # Si no encontramos el código, intentar usar el nombre directamente
+                print(f"⚠️ Destino del formulario parseado pero sin código: {city}, {country_name}")
+                return (city, None)
+        else:
+            # Solo ciudad, sin país
+            print(f"✅ Destino del formulario (solo ciudad): {city}")
+            return (city, None)
+    else:
+        # No hay coma, asumir que es solo la ciudad
+        print(f"✅ Destino del formulario (solo ciudad): {destination}")
+        return (destination, None)
 
 
 def extract_destination_from_question(question: str) -> Optional[tuple[str, Optional[str]]]:

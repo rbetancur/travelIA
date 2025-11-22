@@ -5,7 +5,7 @@ from typing import Optional
 import google.generativeai as genai
 import os
 from prompts import load_prompt
-from weather import WeatherService, extract_destination_from_question
+from weather import WeatherService, extract_destination_from_question, parse_form_destination
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -94,6 +94,7 @@ app.add_middleware(
 
 class TravelQuery(BaseModel):
     question: str
+    destination: Optional[str] = None  # Destino del formulario (formato: "Ciudad, País")
 
 
 class TravelResponse(BaseModel):
@@ -199,7 +200,19 @@ async def plan_travel(query: TravelQuery):
         # Intentar obtener el clima del destino si está disponible
         weather_message = None
         if weather_service.is_available():
-            destination = extract_destination_from_question(query.question)
+            # Prioridad 1: Usar destino del formulario si está disponible
+            destination = None
+            if query.destination:
+                destination = parse_form_destination(query.destination)
+                if destination:
+                    print(f"📍 Usando destino del formulario: {query.destination}")
+            
+            # Prioridad 2: Extraer destino del texto de la pregunta si no hay destino del formulario
+            if not destination:
+                destination = extract_destination_from_question(query.question)
+                if destination:
+                    print(f"📍 Destino extraído del texto de la pregunta")
+            
             if destination:
                 city, country = destination
                 print(f"🌤️ Intentando obtener clima para: {city}, {country}")
@@ -210,7 +223,7 @@ async def plan_travel(query: TravelQuery):
                 else:
                     print(f"❌ No se pudo obtener el clima para {city}, {country}")
             else:
-                print(f"⚠️ No se pudo extraer el destino de la pregunta")
+                print(f"⚠️ No se pudo obtener el destino (ni del formulario ni del texto)")
         else:
             print(f"⚠️ Servicio de clima no disponible (API key no configurada)")
         
@@ -298,6 +311,22 @@ async def get_popular_destinations():
         # Validar y limitar a 5 destinos
         if destinations and len(destinations) > 0:
             destinations = destinations[:5]
+            
+            # Pre-procesar destinos para preparar información del clima
+            # Esto parsea cada destino y obtiene códigos ISO usando Gemini (con cache)
+            from weather import parse_form_destination
+            
+            for dest in destinations:
+                try:
+                    # Parsear destino (esto obtiene código ISO con Gemini si no está en cache)
+                    parsed = parse_form_destination(dest)
+                    if parsed:
+                        city, country_code = parsed
+                        print(f"✅ Destino popular pre-procesado para cache: {dest} → ({city}, {country_code})")
+                except Exception as e:
+                    # No fallar si hay error en pre-procesamiento, es solo optimización
+                    print(f"⚠️ Error al pre-procesar destino popular {dest}: {e}")
+            
             return DestinationsResponse(destinations=destinations)
         
         # Si falla el parseo, devolver destinos por defecto
@@ -308,6 +337,18 @@ async def get_popular_destinations():
             "Bali, Indonesia",
             "Barcelona, España"
         ]
+        
+        # Pre-procesar destinos por defecto también
+        from weather import parse_form_destination
+        for dest in default_destinations:
+            try:
+                parsed = parse_form_destination(dest)
+                if parsed:
+                    city, country_code = parsed
+                    print(f"✅ Destino por defecto pre-procesado para cache: {dest} → ({city}, {country_code})")
+            except Exception as e:
+                print(f"⚠️ Error al pre-procesar destino por defecto {dest}: {e}")
+        
         return DestinationsResponse(destinations=default_destinations)
         
     except HTTPException:
@@ -327,6 +368,18 @@ async def get_popular_destinations():
             "Bali, Indonesia",
             "Barcelona, España"
         ]
+        
+        # Pre-procesar destinos por defecto también
+        from weather import parse_form_destination
+        for dest in default_destinations:
+            try:
+                parsed = parse_form_destination(dest)
+                if parsed:
+                    city, country_code = parsed
+                    print(f"✅ Destino por defecto (error) pre-procesado para cache: {dest} → ({city}, {country_code})")
+            except Exception as e:
+                print(f"⚠️ Error al pre-procesar destino por defecto {dest}: {e}")
+        
         return DestinationsResponse(destinations=default_destinations)
 
 
@@ -398,6 +451,24 @@ async def search_destinations(search_query: DestinationSearchQuery):
         # Validar y limitar a 5 destinos
         if destinations and len(destinations) > 0:
             destinations = destinations[:5]
+            
+            # Pre-procesar destinos para preparar información del clima
+            # Esto parsea cada destino y obtiene códigos ISO usando Gemini (con cache)
+            # Como usa cache, es rápido y no bloquea significativamente la respuesta
+            from weather import parse_form_destination
+            
+            for dest in destinations:
+                try:
+                    # Parsear destino (esto obtiene código ISO con Gemini si no está en cache)
+                    # Si ya está en cache, es instantáneo
+                    parsed = parse_form_destination(dest)
+                    if parsed:
+                        city, country_code = parsed
+                        print(f"✅ Destino pre-procesado para cache: {dest} → ({city}, {country_code})")
+                except Exception as e:
+                    # No fallar si hay error en pre-procesamiento, es solo optimización
+                    print(f"⚠️ Error al pre-procesar destino {dest}: {e}")
+            
             return DestinationsResponse(destinations=destinations)
         
         # Si falla el parseo, devolver lista vacía
@@ -453,6 +524,31 @@ def clear_weather_cache():
     weather_service.cache.clear()
     return {
         "message": "Cache limpiado exitosamente",
+        "cleared": True
+    }
+
+
+@app.get("/api/weather/country-codes/stats")
+def get_country_code_cache_stats():
+    """
+    Endpoint para obtener estadísticas del cache de códigos de países.
+    """
+    from weather import _country_code_cache
+    stats = _country_code_cache.get_stats()
+    return {
+        "cache_stats": stats
+    }
+
+
+@app.post("/api/weather/country-codes/clear")
+def clear_country_code_cache():
+    """
+    Endpoint para limpiar el cache de códigos de países.
+    """
+    from weather import _country_code_cache
+    _country_code_cache.clear()
+    return {
+        "message": "Cache de códigos de países limpiado exitosamente",
         "cleared": True
     }
 

@@ -23,7 +23,11 @@ import {
   Hotel,
   UtensilsCrossed,
   Lightbulb,
-  DollarSign
+  DollarSign,
+  Cloud,
+  Thermometer,
+  Droplets,
+  Wind
 } from 'lucide-react';
 import './App.css';
 
@@ -675,6 +679,7 @@ function App() {
     try {
       const result = await axios.post(`${API_URL}/api/travel`, {
         question: preFilledQuestion.trim(),
+        destination: formData.destination,  // Enviar destino del formulario
       });
 
       setResponse(result.data.answer);
@@ -777,6 +782,7 @@ function App() {
   };
 
   const handleDestinationSelect = (destination) => {
+    // Actualizar el formulario inmediatamente
     setFormData(prev => ({
       ...prev,
       destination: destination
@@ -784,6 +790,10 @@ function App() {
     setDestinationSuggestions([]);
     setShowSuggestions(false);
     setDestinationError('');
+    
+    // El destino ya fue pre-procesado cuando se buscó en /api/destinations/search
+    // La información del clima ya está en cache del backend, lista para cuando se envíe el formulario
+    console.log(`✅ Destino seleccionado: ${destination} (ya pre-procesado en búsqueda)`);
   };
 
   const validateDestination = (value) => {
@@ -808,6 +818,8 @@ function App() {
       setShowSuggestions(false);
       if (formData.destination) {
         validateDestination(formData.destination);
+        // El destino ya fue pre-procesado cuando se buscó en /api/destinations/search
+        // Si el usuario escribió manualmente, se procesará cuando se envíe el formulario
       }
     }, 200);
   };
@@ -1222,6 +1234,50 @@ function App() {
     }
 
     return null;
+  };
+
+  // Función para parsear el mensaje del clima y extraer información
+  const parseWeatherInfo = (weatherText) => {
+    if (!weatherText) return null;
+    
+    // Extraer ciudad del formato: "🌤️ **Clima Actual en Ciudad, País:**"
+    // También manejar formato sin emoji: "**Clima Actual en Ciudad, País:**"
+    const cityMatch = weatherText.match(/(?:🌤️\s*)?\*\*Clima Actual en ([^:]+):\*\*/);
+    const city = cityMatch ? cityMatch[1].trim() : '';
+    
+    if (!city) return null; // Si no hay ciudad, no hay información válida
+    
+    // Extraer datos del clima (temperatura, condiciones, humedad, viento)
+    const lines = weatherText.split('\n').filter(line => {
+      const trimmed = line.trim();
+      return trimmed && (trimmed.includes('•') || trimmed.includes('T:') || trimmed.includes('Temperatura') || trimmed.includes('Condiciones') || trimmed.includes('Humedad') || trimmed.includes('Viento'));
+    });
+    
+    const weatherData = {
+      temperatura: '',
+      condiciones: '',
+      humedad: '',
+      viento: ''
+    };
+    
+    lines.forEach(line => {
+      const cleanLine = line.replace(/\*\*/g, '').replace(/🌤️/g, '').trim();
+      // Nuevo formato técnico: "T: -1.8°C / ST: -3.9°C"
+      if (cleanLine.includes('T:') && cleanLine.includes('ST:')) {
+        weatherData.temperatura = cleanLine.replace(/•\s*/, '').trim();
+      } else if (cleanLine.includes('Temperatura:')) {
+        // Formato legacy por si acaso
+        weatherData.temperatura = cleanLine.replace(/•\s*Temperatura:\s*/, '').replace(/Temperatura:\s*/, '').trim();
+      } else if (cleanLine.includes('Condiciones:')) {
+        weatherData.condiciones = cleanLine.replace(/•\s*Condiciones:\s*/, '').replace(/Condiciones:\s*/, '').trim();
+      } else if (cleanLine.includes('Humedad:')) {
+        weatherData.humedad = cleanLine.replace(/•\s*Humedad:\s*/, '').replace(/Humedad:\s*/, '').trim();
+      } else if (cleanLine.includes('Viento:')) {
+        weatherData.viento = cleanLine.replace(/•\s*Viento:\s*/, '').replace(/Viento:\s*/, '').trim();
+      }
+    });
+    
+    return { city, ...weatherData };
   };
 
   // Función para obtener el icono según la sección
@@ -1908,29 +1964,63 @@ function App() {
 
               const hasMultipleSections = sectionKeys.length > 1;
 
+              const weatherInfo = weather ? parseWeatherInfo(weather) : null;
+
               return (
                 <div className="response-container">
                   <div className="response-header">
-                    <h2>
-                      Respuesta de Alex{' '}
-                      <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                    </h2>
-                  </div>
-                  <div className="response-content">
-                    {/* Mostrar clima si está disponible */}
-                    {weather && (
-                      <div className="weather-info" style={{
-                        backgroundColor: '#e3f2fd',
-                        border: '1px solid #90caf9',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        marginBottom: '20px',
-                        fontSize: '14px',
-                        lineHeight: '1.6'
-                      }}>
-                        <div style={{ whiteSpace: 'pre-line' }} dangerouslySetInnerHTML={{ __html: weather.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }} />
+                    <div className="response-header-left">
+                      <h2>
+                        Respuesta de Alex{' '}
+                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
+                      </h2>
+                    </div>
+                    {weatherInfo && (
+                      <div className="response-header-right">
+                        <div className="weather-header-container">
+                          <div className="weather-header-left">
+                            <Cloud className="weather-main-icon" />
+                            <div className="weather-header-left-content">
+                              <div className="weather-label">Clima Actual en</div>
+                              <div className="weather-city">{weatherInfo.city}</div>
+                            </div>
+                          </div>
+                          <div className="weather-header-divider"></div>
+                          <div className="weather-header-right">
+                            {weatherInfo.temperatura && (
+                              <div className="weather-detail-item">
+                                <Thermometer size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.temperatura}</span>
+                              </div>
+                            )}
+                            {weatherInfo.condiciones && (
+                              <div className="weather-detail-item">
+                                <Cloud size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.condiciones}</span>
+                              </div>
+                            )}
+                            {(weatherInfo.humedad || weatherInfo.viento) && (
+                              <div className="weather-detail-row">
+                                {weatherInfo.humedad && (
+                                  <div className="weather-detail-item">
+                                    <Droplets size={14} className="weather-detail-icon" />
+                                    <span>{weatherInfo.humedad}</span>
+                                  </div>
+                                )}
+                                {weatherInfo.viento && (
+                                  <div className="weather-detail-item">
+                                    <Wind size={14} className="weather-detail-icon" />
+                                    <span>{weatherInfo.viento}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
+                  </div>
+                  <div className="response-content">
                     {/* Mostrar texto antes de las secciones solo si contiene información útil */}
                     {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
                       <div className="response-text response-text-before">
@@ -2011,29 +2101,63 @@ function App() {
               );
             } else {
               // Mostrar respuesta normal si no hay secciones
+              const weatherInfo = weather ? parseWeatherInfo(weather) : null;
+              
               return (
                 <div className="response-container">
                   <div className="response-header">
-                    <h2>
-                      Respuesta de Alex{' '}
-                      <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                    </h2>
-                  </div>
-                  <div className="response-content">
-                    {/* Mostrar clima si está disponible */}
-                    {weather && (
-                      <div className="weather-info" style={{
-                        backgroundColor: '#e3f2fd',
-                        border: '1px solid #90caf9',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        marginBottom: '20px',
-                        fontSize: '14px',
-                        lineHeight: '1.6'
-                      }}>
-                        <div style={{ whiteSpace: 'pre-line' }} dangerouslySetInnerHTML={{ __html: weather.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }} />
+                    <div className="response-header-left">
+                      <h2>
+                        Respuesta de Alex{' '}
+                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
+                      </h2>
+                    </div>
+                    {weatherInfo && (
+                      <div className="response-header-right">
+                        <div className="weather-header-container">
+                          <div className="weather-header-left">
+                            <Cloud className="weather-main-icon" />
+                            <div className="weather-header-left-content">
+                              <div className="weather-label">Clima Actual en</div>
+                              <div className="weather-city">{weatherInfo.city}</div>
+                            </div>
+                          </div>
+                          <div className="weather-header-divider"></div>
+                          <div className="weather-header-right">
+                            {weatherInfo.temperatura && (
+                              <div className="weather-detail-item">
+                                <Thermometer size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.temperatura}</span>
+                              </div>
+                            )}
+                            {weatherInfo.condiciones && (
+                              <div className="weather-detail-item">
+                                <Cloud size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.condiciones}</span>
+                              </div>
+                            )}
+                            {(weatherInfo.humedad || weatherInfo.viento) && (
+                              <div className="weather-detail-row">
+                                {weatherInfo.humedad && (
+                                  <div className="weather-detail-item">
+                                    <Droplets size={14} className="weather-detail-icon" />
+                                    <span>{weatherInfo.humedad}</span>
+                                  </div>
+                                )}
+                                {weatherInfo.viento && (
+                                  <div className="weather-detail-item">
+                                    <Wind size={14} className="weather-detail-icon" />
+                                    <span>{weatherInfo.viento}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
+                  </div>
+                  <div className="response-content">
                     <div className="response-text">
                       {renderPlainText(response)}
                     </div>
