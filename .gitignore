@@ -6,7 +6,9 @@ __pycache__/
 .Python
 env/
 venv/
+**/venv/
 ENV/
+**/ENV/
 build/
 develop-eggs/
 dist/
@@ -25,6 +27,7 @@ wheels/
 
 # React
 node_modules/
+**/node_modules/
 /.pnp
 .pnp.js
 /coverage

@@ -1,0 +1,25 @@
+rol | experto en viajes y turismo
+
+query | usuario
+"{query}"
+
+tarea | sugerir destinos que coincidan con query
+
+formato | respuesta
+Tipo | una línea por destino
+Características | sin comillas, corchetes ni comas
+Cantidad | máximo 5 destinos
+Contenido | ciudad y país
+Coincidencia | destinos que contengan "{query}"
+Criterio | destinos reales y reconocidos
+Restricciones | NO explicaciones, numeración, ni texto adicional
+Sin resultados | respuesta vacía
+
+ejemplos | formato
+query | respuesta
+aru | Aruba, Aruba
+barc | Barcelona, España
+tok | Tokio, Japón
+
+instruccion | final
+Responde SOLO con los destinos, uno por línea, sin texto adicional.

@@ -27,17 +27,29 @@ $env:GEMINI_API_KEY="tu_api_key_aqui"
 set GEMINI_API_KEY=tu_api_key_aqui
 ```
 
-### Método 2: Permanente
+### Método 2: Permanente (Recomendado)
 
-**Linux/Mac:**
-Agrega al final de `~/.bashrc` o `~/.zshrc`:
+**Linux/Mac (zsh):**
+```bash
+echo 'export GEMINI_API_KEY=tu_api_key_aqui' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Linux/Mac (bash):**
 ```bash
 echo 'export GEMINI_API_KEY=tu_api_key_aqui' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-**Windows:**
+**Windows (PowerShell):**
+```powershell
+[System.Environment]::SetEnvironmentVariable('GEMINI_API_KEY', 'tu_api_key_aqui', 'User')
+```
+
+**Windows (GUI):**
 Configurar en: Panel de Control > Sistema > Variables de Entorno
+
+**Nota:** Después de configurar, reinicia la terminal o ejecuta `source ~/.zshrc` (o `source ~/.bashrc`).
 
 ---
 
