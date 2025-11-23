@@ -14,6 +14,42 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 from reportlab.pdfgen import canvas
 from PIL import Image as PILImage
 import requests
+from xml.sax.saxutils import escape
+
+
+def escape_xml_text(text: str) -> str:
+    """
+    Escapa caracteres especiales para XML/HTML de forma segura.
+    Asegura que el texto esté en UTF-8 y escapa caracteres que pueden causar problemas.
+    
+    Args:
+        text: Texto a escapar
+        
+    Returns:
+        Texto escapado y codificado correctamente
+    """
+    if not text:
+        return ""
+    
+    # Asegurar que el texto sea string y esté en UTF-8
+    if isinstance(text, bytes):
+        text = text.decode('utf-8', errors='replace')
+    elif not isinstance(text, str):
+        text = str(text)
+    
+    # Escapar caracteres XML especiales
+    text = escape(text, {
+        '"': '&quot;',
+        "'": '&apos;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;'
+    })
+    
+    # Reemplazar caracteres de control que pueden causar problemas
+    text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+    
+    return text
 
 
 def parse_json_from_text(text: str) -> Optional[Dict]:
@@ -197,18 +233,21 @@ def create_pdf(
     story.append(Spacer(1, 0.3*inch))
     
     # Información del destino
-    destination_text = f"<b>Destino:</b> {destination}"
+    escaped_destination = escape_xml_text(destination)
+    destination_text = f"<b>Destino:</b> {escaped_destination}"
     story.append(Paragraph(destination_text, subtitle_style))
     
     # Fechas
     if departure_date or return_date:
         dates_text = ""
         if departure_date:
-            dates_text += f"<b>Salida:</b> {departure_date}"
+            escaped_departure = escape_xml_text(departure_date)
+            dates_text += f"<b>Salida:</b> {escaped_departure}"
         if return_date:
             if dates_text:
                 dates_text += " | "
-            dates_text += f"<b>Regreso:</b> {return_date}"
+            escaped_return = escape_xml_text(return_date)
+            dates_text += f"<b>Regreso:</b> {escaped_return}"
         story.append(Paragraph(dates_text, normal_style))
         story.append(Spacer(1, 0.2*inch))
     
@@ -268,9 +307,9 @@ def create_pdf(
             story.append(Paragraph(title, section_style))
             
             for item in items:
-                # Limpiar el texto y crear párrafo
-                clean_item = item.replace('<', '&lt;').replace('>', '&gt;')
-                story.append(Paragraph(f"• {clean_item}", item_style))
+                # Escapar caracteres especiales correctamente
+                escaped_item = escape_xml_text(item)
+                story.append(Paragraph(f"• {escaped_item}", item_style))
             
             story.append(Spacer(1, 0.15*inch))
     
@@ -283,8 +322,11 @@ def create_pdf(
             content = msg.get('content', '')
             if content:
                 role_text = "Usuario" if role == 'user' else "Alex"
-                clean_content = content.replace('<', '&lt;').replace('>', '&gt;')
-                story.append(Paragraph(f"<b>{role_text}:</b> {clean_content[:500]}...", normal_style))
+                escaped_content = escape_xml_text(content)
+                # Limitar longitud y agregar puntos suspensivos si es necesario
+                if len(escaped_content) > 500:
+                    escaped_content = escaped_content[:500] + "..."
+                story.append(Paragraph(f"<b>{role_text}:</b> {escaped_content}", normal_style))
                 story.append(Spacer(1, 0.1*inch))
     
     # Footer
