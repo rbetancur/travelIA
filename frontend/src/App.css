@@ -1,11 +1,1082 @@
+/* ============================================
+   LAYOUT PRINCIPAL - DISEÑO TIPO CHAT MODERNO
+   ============================================ */
+
 .App {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Cambiar de center a flex-start para permitir extensión en altura */
   justify-content: center;
   padding: 20px;
+  padding-bottom: 50px; /* Espacio adicional en el bottom para alinear con iconos */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
 }
 
+/* Layout tipo chat - mantiene fondo púrpura y diseño centrado */
+.chat-layout {
+  display: flex;
+  flex-direction: column;
+  max-width: 900px;
+  width: 100%;
+  min-height: calc(100vh - 40px);
+  height: auto; /* Permitir que se extienda en altura según el contenido */
+  max-height: calc(100vh - 70px); /* Altura máxima considerando padding y alineación con iconos */
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: visible; /* Cambiar a visible para que los botones flotantes sean visibles */
+  animation: fadeIn 0.5s ease-in;
+  position: relative;
+  margin: 0 auto;
+  margin-bottom: 30px; /* Alinear bottom con los iconos flotantes */
+}
+
+/* Contenedor del formulario - diseño centrado original */
+.container {
+  width: 100%;
+  max-width: 800px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: fadeIn 0.5s ease-in;
+}
+
+/* Header fijo */
+.chat-header {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+/* Encabezado fijo del clima - fuera del área de chat */
+.fixed-weather-header {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  padding: 15px 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  flex-shrink: 0;
+  border-radius: 0;
+}
+
+.fixed-weather-header .weather-header-container {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.fixed-weather-header .weather-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.fixed-weather-header .weather-main-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+  width: 28px;
+  height: 28px;
+  align-self: flex-start;
+  margin-top: 0;
+  color: white;
+}
+
+.fixed-weather-header .weather-header-left-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  align-items: center;
+}
+
+.fixed-weather-header .weather-label {
+  font-size: 0.65rem;
+  opacity: 0.85;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  line-height: 1.2;
+  text-align: center;
+  color: white;
+}
+
+.fixed-weather-header .weather-city {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  text-align: center;
+  color: white;
+}
+
+.fixed-weather-header .weather-header-divider {
+  width: 1px;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.fixed-weather-header .weather-header-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  min-width: 160px;
+}
+
+.fixed-weather-header .weather-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fixed-weather-header .weather-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  opacity: 0.95;
+  color: white;
+}
+
+.fixed-weather-header .weather-detail-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+/* Fotos en el encabezado fijo */
+.fixed-weather-photos {
+  padding: 15px 20px;
+  background: white;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fixed-weather-photos .result-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.fixed-weather-photos .result-photo-item {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fixed-weather-photos .result-photo-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.fixed-weather-photos .result-photo-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1400px;
+  margin: 0 auto;
+  gap: 1rem;
+}
+
+.chat-header-center {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+}
+
+.header-weather-info {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.header-weather-info .weather-header-container {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.header-weather-info .weather-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.header-weather-info .weather-main-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+  width: 24px;
+  height: 24px;
+  color: white;
+}
+
+.header-weather-info .weather-header-left-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  align-items: center;
+}
+
+.header-weather-info .weather-label {
+  font-size: 0.6rem;
+  opacity: 0.85;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  line-height: 1.2;
+  text-align: center;
+  color: white;
+}
+
+.header-weather-info .weather-city {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  text-align: center;
+  color: white;
+}
+
+.header-weather-info .weather-header-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.header-weather-info .weather-header-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.65rem;
+  line-height: 1.3;
+  min-width: 140px;
+}
+
+.header-weather-info .weather-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-weather-info .weather-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  opacity: 0.95;
+  color: white;
+}
+
+.header-weather-info .weather-detail-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+  width: 11px;
+  height: 11px;
+  color: white;
+}
+
+/* Fotos fijas - debajo del header, encima del área de chat */
+.fixed-photos-section {
+  padding: 15px 20px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  width: 100%;
+}
+
+.fixed-photos-section .result-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.fixed-photos-section .result-photo-item {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background: white;
+}
+
+.fixed-photos-section .result-photo-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.fixed-photos-section .result-photo-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-header-left {
+  flex-shrink: 0;
+  min-width: 200px;
+}
+
+.chat-header-right {
+  flex-shrink: 0;
+}
+
+.chat-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem 0;
+  letter-spacing: -0.5px;
+}
+
+.chat-subtitle {
+  font-size: 0.95rem;
+  opacity: 0.9;
+  font-weight: 400;
+  margin: 0;
+}
+
+.chat-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.side-panel-toggle {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: none; /* Oculto por defecto en pantallas grandes */
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+/* Mostrar el botón solo en pantallas pequeñas (móviles) */
+@media (max-width: 768px) {
+  .side-panel-toggle {
+    display: flex;
+  }
+}
+
+.side-panel-toggle:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+.side-panel-toggle.active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.side-panel-toggle .rotated {
+  transform: rotate(180deg);
+}
+
+/* Contenedor principal con panel lateral */
+.chat-main-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0; /* Permite que el flex funcione correctamente */
+}
+
+/* Panel lateral colapsable */
+.side-panel {
+  width: 0;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+.side-panel.open {
+  width: 320px;
+}
+
+.side-panel-content {
+  padding: 1.5rem;
+  width: 320px;
+}
+
+.side-panel-section {
+  margin-bottom: 2rem;
+}
+
+.side-panel-section:last-child {
+  margin-bottom: 0;
+}
+
+.side-panel-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 1rem 0;
+}
+
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.quick-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: #1e293b;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.quick-action-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateX(4px);
+}
+
+.quick-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.realtime-info-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.realtime-info-compact-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.realtime-info-compact-label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.realtime-info-compact-value {
+  font-size: 0.9rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* Área de chat principal */
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  min-height: 0; /* Permite que el flex funcione correctamente */
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  padding-right: calc(2rem + 100px); /* Espacio para los botones flotantes */
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  scroll-behavior: smooth;
+  min-height: 0; /* Permite que el scroll funcione correctamente */
+}
+
+/* En pantallas pequeñas, reducir el padding */
+@media (max-width: 1199px) {
+  .chat-messages {
+    padding-right: 2rem; /* Sin espacio extra en móvil */
+  }
+}
+
+/* Scrollbar personalizado */
+.chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Mensajes */
+.message {
+  display: flex;
+  gap: 1rem;
+  animation: messageSlideIn 0.3s ease-out;
+  max-width: 85%;
+}
+
+.message-user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.message-assistant {
+  align-self: flex-start;
+  max-width: 100%; /* Los mensajes del asistente aprovechan todo el ancho disponible */
+}
+
+.message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+}
+
+.message-user .message-avatar {
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+}
+
+.message-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-text {
+  background: #f8fafc;
+  padding: 1rem 1.25rem;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  line-height: 1.6;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.message-user .message-text {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  border-color: #1e40af;
+}
+
+.welcome-message .message-text {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #bfdbfe;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Input fijo en la parte inferior */
+.chat-input-container {
+  border-top: 1px solid #e2e8f0;
+  background: white;
+  padding: 1.25rem 2rem;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.05);
+  position: relative;
+  z-index: 50;
+  flex-shrink: 0;
+}
+
+.chat-input-form {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.chat-input-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 0.75rem 1rem;
+  transition: all 0.2s ease;
+}
+
+.chat-input-wrapper:focus-within {
+  border-color: #2563eb;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.chat-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  resize: none;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #1e293b;
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.chat-input:focus {
+  outline: none;
+}
+
+.chat-input::placeholder {
+  color: #94a3b8;
+}
+
+.chat-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.chat-send-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Tarjetas de resultados */
+.result-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.result-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.result-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* Encabezado completo del clima en la tarjeta de resultado */
+.result-card-header-weather {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  padding: 15px 20px;
+  border-bottom: none;
+}
+
+.result-card-header-weather .weather-header-container {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0;
+}
+
+.result-card-header-weather .weather-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.result-card-header-weather .weather-main-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+  width: 28px;
+  height: 28px;
+  align-self: flex-start;
+  margin-top: 0;
+  color: white;
+}
+
+.result-card-header-weather .weather-header-left-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  align-items: center;
+}
+
+.result-card-header-weather .weather-label {
+  font-size: 0.65rem;
+  opacity: 0.85;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  line-height: 1.2;
+  text-align: center;
+  color: white;
+}
+
+.result-card-header-weather .weather-city {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  text-align: center;
+  color: white;
+}
+
+.result-card-header-weather .weather-header-divider {
+  width: 1px;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.result-card-header-weather .weather-header-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  min-width: 160px;
+}
+
+.result-card-header-weather .weather-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.result-card-header-weather .weather-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  opacity: 0.95;
+  color: white;
+}
+
+.result-card-header-weather .weather-detail-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+.weather-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+}
+
+.favorite-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.favorite-btn:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+  transform: scale(1.1);
+}
+
+.result-photos {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.result-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.result-photo-item {
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.result-photo-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.result-photo-item:hover img {
+  transform: scale(1.05);
+}
+
+.result-content {
+  padding: 1.25rem;
+  max-height: 600px;
+  overflow: hidden;
+  transition: max-height 0.3s ease, overflow 0.3s ease;
+}
+
+.result-content.expanded {
+  max-height: 5000px; /* Valor alto para permitir scroll suave */
+  overflow: visible;
+}
+
+.result-text {
+  margin-bottom: 1.5rem;
+  line-height: 1.7;
+  color: #1e293b;
+}
+
+.result-text:last-child {
+  margin-bottom: 0;
+}
+
+.result-sections {
+  margin: 1.5rem 0;
+}
+
+.section-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.section-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.section-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.section-nav-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #2563eb;
+}
+
+.section-indicator {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  padding: 0 0.5rem;
+}
+
+.section-content {
+  padding: 1.25rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.expand-btn {
+  width: 100%;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.expand-btn:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.expand-btn .rotated {
+  transform: rotate(90deg);
+}
+
+/* Skeleton loaders mejorados */
+.skeleton-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skeleton-line {
+  height: 1.2rem;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 0%,
+    #f8f8f8 50%,
+    #f0f0f0 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Estilos legacy para compatibilidad */
 .container {
   width: 100%;
   max-width: 800px;
@@ -2522,16 +3593,38 @@
   position: relative;
 }
 
-/* Contenedor de botones flotantes - justo al lado del área blanca */
+/* Contenedor de botones flotantes - alineado con el área de chat */
 .floating-buttons-container {
-  position: absolute;
-  left: calc(100% + 20px);
+  position: fixed;
   bottom: 30px;
   z-index: 1000;
-  display: flex;
+  display: flex; /* Visible por defecto en pantallas grandes */
   flex-direction: column;
   gap: 12px;
   align-items: center;
+}
+
+/* En pantallas grandes, alinear con el borde derecho del chat (900px + padding) */
+@media (min-width: 1200px) {
+  .floating-buttons-container {
+    right: calc((100vw - 900px) / 2 - 100px);
+    display: flex; /* Mostrar en pantallas grandes */
+  }
+}
+
+/* En pantallas medianas */
+@media (min-width: 769px) and (max-width: 1199px) {
+  .floating-buttons-container {
+    right: 20px;
+    display: flex; /* Mostrar en pantallas medianas */
+  }
+}
+
+/* Ocultar iconos flotantes en pantallas pequeñas (móviles) */
+@media (max-width: 768px) {
+  .floating-buttons-container {
+    display: none; /* Ocultar en móviles */
+  }
 }
 
 /* Contenedor del botón flotante con tooltip */
@@ -3012,11 +4105,7 @@
 /* Responsive: ajustar panel flotante en pantallas pequeñas */
 @media (max-width: 768px) {
   .floating-buttons-container {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    left: auto;
-    gap: 10px;
+    display: none; /* Ocultar iconos flotantes en móviles */
   }
   
   .realtime-info-wrapper {
@@ -4169,6 +5258,103 @@
 @media (min-width: 769px) and (max-width: 1024px) {
   .skeleton-photos-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================
+   RESPONSIVE DESIGN - DISEÑO TIPO CHAT
+   ============================================ */
+
+@media (max-width: 768px) {
+  .chat-layout {
+    height: 100vh;
+    height: 100dvh; /* Para móviles */
+  }
+
+  .chat-header {
+    padding: 1rem 1.25rem;
+  }
+
+  .chat-title {
+    font-size: 1.5rem;
+  }
+
+  .chat-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .side-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    height: 100dvh;
+    z-index: 200;
+    background: white;
+    box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .side-panel.open {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .chat-messages {
+    padding: 1.25rem 1rem;
+    gap: 1rem;
+  }
+
+  .message {
+    max-width: 90%;
+  }
+
+  .chat-input-container {
+    padding: 1rem;
+  }
+
+  .result-photos-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .result-content {
+    max-height: 400px;
+  }
+
+  .section-content {
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header {
+    padding: 0.875rem 1rem;
+  }
+
+  .chat-title {
+    font-size: 1.25rem;
+  }
+
+  .chat-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .message {
+    max-width: 95%;
+    gap: 0.75rem;
+  }
+
+  .message-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .chat-input-wrapper {
+    padding: 0.625rem 0.875rem;
+  }
+
+  .chat-send-btn {
+    width: 36px;
+    height: 36px;
   }
 }
 

@@ -94,6 +94,11 @@ function App() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [favoriteToDelete, setFavoriteToDelete] = useState(null);
   const [deleteAllFavorites, setDeleteAllFavorites] = useState(false);
+  const [showSidePanel, setShowSidePanel] = useState(false);
+  const [expandedResults, setExpandedResults] = useState({});
+  const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const [chatMessages, setChatMessages] = useState([]); // Almacenar mensajes enviados
   
   // Función para limpiar texto técnico innecesario (debe estar antes de parseResponseSections)
   const cleanText = useCallback((text) => {
@@ -467,6 +472,20 @@ function App() {
       };
     }
   }, [response, carouselIndex]);
+
+  // Scroll automático al final del chat cuando hay nuevos mensajes
+  useEffect(() => {
+    if (messagesEndRef.current && chatContainerRef.current) {
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      };
+      
+      // Pequeño delay para asegurar que el DOM se haya actualizado
+      const timeoutId = setTimeout(scrollToBottom, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [response, loading, question]);
 
   // Manejar navegación del carrusel con teclado
   useEffect(() => {
@@ -1297,7 +1316,9 @@ function App() {
       JSON.stringify(currentFormData) !== JSON.stringify(lastFormDataRef.current) ||
       tripType !== lastTripTypeRef.current;
     
-    setQuestion(preFilledQuestion);
+    // Agregar el mensaje directamente al timeline del chat (no al input)
+    setChatMessages(prev => [...prev, { role: 'user', content: preFilledQuestion.trim() }]);
+    setQuestion(''); // Limpiar el input
     setShowForm(false);
     
     // IMPORTANTE: El caché solo se usa si:
@@ -1307,6 +1328,15 @@ function App() {
     if (!hasChanged && response && response.trim().length > 0) {
       console.log('💾 [FORMULARIO] Usando respuesta en caché (datos del formulario no cambiaron)');
       console.log('⚠️ [FORMULARIO] NO se consulta a Gemini - usando respuesta previa');
+      // Agregar la respuesta existente al timeline del chat
+      setChatMessages(prev => {
+        // Verificar si la respuesta ya está en el timeline para evitar duplicados
+        const lastMessage = prev[prev.length - 1];
+        if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content === response) {
+          return prev; // Ya está en el timeline
+        }
+        return [...prev, { role: 'assistant', content: response }];
+      });
       // No hacer petición, solo mostrar la respuesta existente
       return;
     }
@@ -1342,6 +1372,10 @@ function App() {
       setResponse(result.data.answer);
       setWeather(result.data.weather || null);
       setPhotos(result.data.photos || null);
+      
+      // Agregar la respuesta del asistente al timeline del chat
+      setChatMessages(prev => [...prev, { role: 'assistant', content: result.data.answer }]);
+      
       console.log('🌤️ Clima recibido (formulario):', result.data.weather);
       console.log('📸 Fotos recibidas (formulario):', result.data.photos);
       
@@ -1724,6 +1758,14 @@ function App() {
     });
   };
 
+  // Función para alternar expansión de resultados
+  const toggleExpandResult = (resultId) => {
+    setExpandedResults(prev => ({
+      ...prev,
+      [resultId]: !prev[resultId]
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -1733,6 +1775,12 @@ function App() {
     }
 
     const currentQuestion = question.trim();
+    
+    // Agregar el mensaje del usuario a la conversación solo cuando se envía
+    setChatMessages(prev => [...prev, { role: 'user', content: currentQuestion }]);
+    
+    // Limpiar el input después de agregar el mensaje
+    setQuestion('');
     
     console.log('🚀 [CHAT] ========================================');
     console.log('🚀 [CHAT] Usuario hizo click en "Planificar mi viaje"');
@@ -1803,6 +1851,9 @@ function App() {
       setResponse(result.data.answer);
       setPhotos(result.data.photos || null);
       
+      // Agregar la respuesta del asistente a la conversación
+      setChatMessages(prev => [...prev, { role: 'assistant', content: result.data.answer }]);
+      
       // Actualizar weather solo si viene nueva información, sino mantener la anterior
       if (result.data.weather) {
         console.log('🌤️ [CHAT] Actualizando weather con nueva información');
@@ -1830,9 +1881,6 @@ function App() {
           autoSaveFavorite();
         }, 1000);
       }
-      
-      // Limpiar el input después de enviar
-      setQuestion('');
       
       console.log('✅ [CHAT] Proceso completado exitosamente');
       
@@ -2492,554 +2540,676 @@ function App() {
     );
   }
 
+
   return (
+    <>
     <div className="App">
-      <div className="app-layout">
-        <div className="container">
-          <header className="header">
-            <h1 className="title">ViajeIA</h1>
-            <p className="subtitle">
-              Alex, tu Consultor Personal de Viajes{' '}
-              <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
-              <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
-            </p>
-          </header>
-
-        <main className="main-content">
-
-          <form onSubmit={handleSubmit} className="form">
-            <div className="input-group">
-              <textarea
-                className="input-field"
-                placeholder="¿A dónde quieres viajar? ¿Cuál es tu presupuesto? ¿Qué tipo de actividades te interesan?"
-                value={question}
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  
-                  // IMPORTANTE: Si hay una respuesta previa y el usuario está escribiendo,
-                  // limpiar solo la respuesta y fotos (específicos de la pregunta)
-                  // MANTENER weather y realtimeInfo (relacionados con el destino)
-                  if (response && response.trim().length > 0) {
-                    // Si el usuario está modificando la pregunta, limpiar solo response y photos
-                    if (newValue.trim() !== question.trim()) {
-                      console.log('🧹 [CHAT] Usuario está modificando la pregunta');
-                      console.log('🧹 [CHAT] Limpiando: response y photos (específicos de la pregunta)');
-                      console.log('✅ [CHAT] MANTENIENDO: weather y realtimeInfo (relacionados con el destino)');
-                      setResponse('');
-                      setPhotos(null);
-                      setCarouselIndex(0);
-                      // NO limpiar weather ni realtimeInfo - son específicos del destino
-                    }
-                  }
-                  
-                  // Solo actualizar el estado, NO hacer consultas a Gemini
-                  // Las consultas solo se hacen al hacer click en "Planificar mi viaje"
-                  setQuestion(newValue);
-                }}
-                onKeyDown={(e) => {
-                  // Permitir Enter para enviar, pero solo si se presiona Ctrl+Enter o Cmd+Enter
-                  // Enter solo crea nueva línea
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    handleSubmit(e);
-                  }
-                }}
-                rows="4"
-                disabled={loading}
-              />
+      <div className="chat-layout">
+        {/* Header fijo */}
+        <header className="chat-header">
+          <div className="chat-header-content">
+            <div className="chat-header-left">
+              <h1 className="chat-title">ViajeIA</h1>
+              <p className="chat-subtitle">
+                Alex, tu Consultor Personal de Viajes
+              </p>
             </div>
-            
-            <div className="form-actions">
-              <button 
-                type="submit" 
-                className="submit-button"
-                disabled={loading || !question.trim()}
+            <div className="chat-header-center">
+              {/* Información del clima en el header */}
+              {weatherInfo && (
+                <div className="header-weather-info">
+                  <div className="weather-header-container">
+                    <div className="weather-header-left">
+                      <Cloud className="weather-main-icon" />
+                      <div className="weather-header-left-content">
+                        <div className="weather-label">Clima Actual en</div>
+                        <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {weatherInfo.city}
+                          {formData.destination && (
+                            <button
+                              type="button"
+                              className="favorite-toggle-button"
+                              onClick={saveCurrentAsFavorite}
+                              title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'color 0.2s ease',
+                                color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                lineHeight: 1
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                              }}
+                            >
+                              {isFavorite(formData.destination) ? (
+                                <Heart size={16} fill="currentColor" />
+                              ) : (
+                                <Heart size={16} />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="weather-header-divider"></div>
+                    <div className="weather-header-right">
+                      {weatherInfo.temperatura && (
+                        <div className="weather-detail-item">
+                          <Thermometer size={14} className="weather-detail-icon" />
+                          <span>{weatherInfo.temperatura}</span>
+                        </div>
+                      )}
+                      {weatherInfo.condiciones && (
+                        <div className="weather-detail-item">
+                          <Cloud size={14} className="weather-detail-icon" />
+                          <span>{weatherInfo.condiciones}</span>
+                        </div>
+                      )}
+                      {(weatherInfo.humedad || weatherInfo.viento) && (
+                        <div className="weather-detail-row">
+                          {weatherInfo.humedad && (
+                            <div className="weather-detail-item">
+                              <Droplets size={14} className="weather-detail-icon" />
+                              <span>{weatherInfo.humedad}</span>
+                            </div>
+                          )}
+                          {weatherInfo.viento && (
+                            <div className="weather-detail-item">
+                              <Wind size={14} className="weather-detail-icon" />
+                              <span>{weatherInfo.viento}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="chat-header-right">
+              <button
+                type="button"
+                className={`side-panel-toggle ${showSidePanel ? 'active' : ''}`}
+                onClick={() => setShowSidePanel(!showSidePanel)}
+                aria-label="Toggle panel lateral"
               >
-                {loading ? (
-                  <>
-                    <span>Planificando...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Planificar mi viaje</span>
-                    <ArrowRight size={18} />
-                  </>
-                )}
+                <ChevronRight size={20} className={showSidePanel ? 'rotated' : ''} />
               </button>
             </div>
-          </form>
+          </div>
+        </header>
 
-          {/* Skeleton loader mientras se carga la respuesta */}
-          {loading && (
-            <div className="skeleton-response-container">
-              <div className="skeleton-response-header">
-                <div className="skeleton-response-header-left">
-                  <div className="skeleton skeleton-title"></div>
-                  <div className="skeleton skeleton-icon"></div>
+        {/* Fotos fijas - debajo del header, encima del área de chat */}
+        {photos && photos.length > 0 && (
+          <div className="fixed-photos-section">
+            <div className="result-photos-grid">
+              {photos.slice(0, 3).map((photo, index) => (
+                <div key={photo.id || index} className="result-photo-item">
+                  <img
+                    src={photo.url || photo.url_small}
+                    alt={photo.description || `Foto del destino`}
+                    loading="lazy"
+                  />
                 </div>
-                <div className="skeleton-response-header-right">
-                  <div className="skeleton-weather-container">
-                    <div className="skeleton-weather-left">
-                      <div className="skeleton skeleton-weather-icon"></div>
-                      <div className="skeleton-weather-content">
-                        <div className="skeleton skeleton-weather-label"></div>
-                        <div className="skeleton skeleton-weather-city"></div>
-                      </div>
-                    </div>
-                    <div className="skeleton-weather-divider"></div>
-                    <div className="skeleton-weather-right">
-                      <div className="skeleton-weather-detail">
-                        <div className="skeleton skeleton-weather-detail-icon"></div>
-                        <div className="skeleton skeleton-weather-detail-text"></div>
-                      </div>
-                      <div className="skeleton-weather-detail">
-                        <div className="skeleton skeleton-weather-detail-icon"></div>
-                        <div className="skeleton skeleton-weather-detail-text"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="skeleton-response-content">
-                {/* Skeleton para fotos del destino */}
-                <div className="skeleton-photos-container">
-                  <div className="skeleton-photos-header">
-                    <div className="skeleton skeleton-photos-icon"></div>
-                    <div className="skeleton skeleton-photos-title"></div>
-                  </div>
-                  <div className="skeleton-photos-grid">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="skeleton skeleton-photo-item"></div>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Skeleton para texto antes del carrusel */}
-                <div className="skeleton-text-container response-text-before">
-                  <div className="skeleton skeleton-text-line long"></div>
-                  <div className="skeleton skeleton-text-line long"></div>
-                  <div className="skeleton skeleton-text-line medium"></div>
-                </div>
-                
-                {/* Skeleton para carrusel */}
-                <div className="skeleton-carousel-container">
-                  <div className="skeleton-carousel-card">
-                    <div className="skeleton-carousel-header">
-                      <div className="skeleton-carousel-header-left">
-                        <div className="skeleton skeleton-carousel-button"></div>
-                        <div className="skeleton skeleton-carousel-title"></div>
-                      </div>
-                      <div className="skeleton-carousel-header-right">
-                        <div className="skeleton skeleton-carousel-indicator"></div>
-                        <div className="skeleton skeleton-carousel-button"></div>
-                      </div>
-                    </div>
-                    <div className="skeleton-carousel-content">
-                      {/* Skeleton para recomendaciones */}
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="skeleton-recommendation-item">
-                          <div className="skeleton skeleton-recommendation-bullet"></div>
-                          <div className="skeleton-recommendation-content">
-                            <div className="skeleton skeleton-recommendation-subtitle"></div>
-                            <div className="skeleton skeleton-recommendation-description long"></div>
-                            <div className="skeleton skeleton-recommendation-description short"></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Skeleton para texto después del carrusel */}
-                <div className="skeleton-text-container response-text-after">
-                  <div className="skeleton skeleton-text-line long"></div>
-                  <div className="skeleton skeleton-text-line medium"></div>
-                </div>
-              </div>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Solo mostrar respuesta si no está cargando y hay una respuesta válida */}
-          {!loading && response && response.trim().length > 0 && (() => {
-            const parsed = parsedResponse;
-            
-            if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
-              // Mostrar carrusel si hay secciones
-              const sectionKeys = Object.keys(parsed.sections);
-              const validIndex = Math.min(carouselIndex, sectionKeys.length - 1);
-              const currentSectionKey = sectionKeys[validIndex];
-              const currentSectionContent = parsed.sections[currentSectionKey];
-
-              if (!currentSectionKey || !currentSectionContent) {
-                // Si no hay sección válida, mostrar respuesta normal
-                return (
-                  <div className="response-container">
-                    <div className="response-header">
-                    <div className="response-header-left">
-                      <h2>
-                        Respuesta de Alex{' '}
-                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                      </h2>
-                    </div>
-                    <div className="response-header-right">
-                      </div>
-                    </div>
-                    <div className="response-content">
-                      <div className="response-text">{response}</div>
-                    </div>
-                  </div>
-                );
-              }
-
-              const hasMultipleSections = sectionKeys.length > 1;
-
-              return (
-                <div className="response-container">
-                  <div className="response-header">
-                    <div className="response-header-left">
-                      <h2>
-                        Respuesta de Alex{' '}
-                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                      </h2>
-                    </div>
-                    <div className="response-header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                      {weatherInfo && (
-                        <div style={{ marginLeft: '12px' }}>
-                          <div className="weather-header-container">
-                            <div className="weather-header-left">
-                              <Cloud className="weather-main-icon" />
-                              <div className="weather-header-left-content">
-                                <div className="weather-label">Clima Actual en</div>
-                                <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  {weatherInfo.city}
-                                  {formData.destination && response && (
-                                    <button
-                                      type="button"
-                                      className="favorite-toggle-button"
-                                      onClick={saveCurrentAsFavorite}
-                                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '2px',
-                                        borderRadius: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'color 0.2s ease',
-                                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
-                                        lineHeight: 1
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
-                                      }}
-                                    >
-                                      {isFavorite(formData.destination) ? (
-                                        <Heart size={16} fill="currentColor" />
-                                      ) : (
-                                        <Heart size={16} />
-                                      )}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="weather-header-divider"></div>
-                            <div className="weather-header-right">
-                              {weatherInfo.temperatura && (
-                                <div className="weather-detail-item">
-                                  <Thermometer size={14} className="weather-detail-icon" />
-                                  <span>{weatherInfo.temperatura}</span>
-                                </div>
-                              )}
-                              {weatherInfo.condiciones && (
-                                <div className="weather-detail-item">
-                                  <Cloud size={14} className="weather-detail-icon" />
-                                  <span>{weatherInfo.condiciones}</span>
-                                </div>
-                              )}
-                              {(weatherInfo.humedad || weatherInfo.viento) && (
-                                <div className="weather-detail-row">
-                                  {weatherInfo.humedad && (
-                                    <div className="weather-detail-item">
-                                      <Droplets size={14} className="weather-detail-icon" />
-                                      <span>{weatherInfo.humedad}</span>
-                                    </div>
-                                  )}
-                                  {weatherInfo.viento && (
-                                    <div className="weather-detail-item">
-                                      <Wind size={14} className="weather-detail-icon" />
-                                      <span>{weatherInfo.viento}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="response-content">
-                    {/* Mostrar fotos del destino si están disponibles */}
-                    {photos && photos.length > 0 && (
-                      <div className="destination-photos-container">
-                        <div className="destination-photos-header">
-                          <Image size={20} className="photos-icon" />
-                          <h3 className="destination-photos-title">Fotos del Destino</h3>
-                        </div>
-                        <div className="destination-photos-grid">
-                          {photos.map((photo, index) => (
-                            <div key={photo.id || index} className="destination-photo-item">
-                              <a
-                                href={photo.url_full || photo.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="destination-photo-link"
-                                title={photo.description || `Foto de ${photo.photographer}`}
-                              >
-                                <img
-                                  src={photo.url || photo.url_small}
-                                  alt={photo.description || `Foto del destino`}
-                                  className="destination-photo-image"
-                                  loading="lazy"
-                                />
-                                <div className="destination-photo-overlay">
-                                  <div className="destination-photo-credit">
-                                    Foto por {photo.photographer}
-                                  </div>
-                                </div>
-                              </a>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Mostrar texto antes de las secciones solo si contiene información útil */}
-                    {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
-                      <div className="response-text response-text-before">
-                        {renderPlainText(parsed.beforeText)}
-                      </div>
-                    )}
-                    
-                    {/* Carrusel con las secciones */}
-                    <div className="carousel-container">
-                      <div className="carousel-slide">
-                        <div className={`carousel-card ${carouselDirection === 'left' ? 'slide-left' : ''}`} key={validIndex}>
-                          <div className="carousel-section-header">
-                            <div className="carousel-section-header-left">
-                              {hasMultipleSections && (
-                                <button
-                                  className="carousel-button carousel-button-left"
-                                  onClick={() => navigateCarousel('prev')}
-                                  aria-label="Sección anterior"
-                                >
-                                  <ChevronLeft size={18} />
-                                </button>
-                              )}
-                              <h3 className="carousel-section-title">
-                                <span className="carousel-section-icon">
-                                  {getSectionIcon(currentSectionKey)}
-                                </span>
-                                {currentSectionKey}
-                              </h3>
-                            </div>
-                            <div className="carousel-section-header-right">
-                              {hasMultipleSections && (
-                                <>
-                                  <div className="carousel-indicator">
-                                    {validIndex + 1} / {sectionKeys.length}
-                                  </div>
-                                  <button
-                                    className="carousel-button carousel-button-right"
-                                    onClick={() => navigateCarousel('next')}
-                                    aria-label="Siguiente sección"
-                                  >
-                                    <ChevronRight size={18} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div 
-                            className="carousel-section-content"
-                            ref={contentScrollRef}
-                          >
-                            {renderSectionContent(currentSectionContent, currentSectionKey)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {hasMultipleSections && (
-                      <div className="carousel-dots">
-                        {sectionKeys.map((_, index) => (
-                          <button
-                            key={index}
-                            className={`carousel-dot ${index === validIndex ? 'active' : ''}`}
-                            onClick={() => setCarouselIndex(index)}
-                            aria-label={`Ir a sección ${index + 1}`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Mostrar texto después de las secciones solo si contiene información útil */}
-                    {parsed.afterText && parsed.afterText.trim().length > 0 && (
-                      <div className="response-text response-text-after">
-                        {renderPlainText(parsed.afterText)}
-                      </div>
-                    )}
-                  </div>
+        {/* Contenedor principal con panel lateral */}
+        <div className="chat-main-container">
+          {/* Panel lateral colapsable */}
+          <aside className={`side-panel ${showSidePanel ? 'open' : ''}`}>
+            <div className="side-panel-content">
+              <div className="side-panel-section">
+                <h3 className="side-panel-title">Acciones Rápidas</h3>
+                <div className="quick-actions">
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={() => setShowForm(true)}
+                    disabled={showForm}
+                  >
+                    <ArrowLeft size={18} />
+                    <span>Modificar Viaje</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={() => {
+                      setShowHistory(!showHistory);
+                      if (!showHistory && sessionId) {
+                        loadConversationHistory();
+                      }
+                    }}
+                    disabled={!sessionId || !formData.destination}
+                  >
+                    <History size={18} />
+                    <span>Historial</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={handleDownloadItinerary}
+                    disabled={!sessionId || !response}
+                  >
+                    <Download size={18} />
+                    <span>Descargar PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={() => {
+                      setShowFavorites(!showFavorites);
+                      if (!showFavorites) {
+                        loadFavorites();
+                      }
+                    }}
+                  >
+                    <Bookmark size={18} />
+                    <span>Favoritos</span>
+                  </button>
                 </div>
-              );
-            } else {
-              // Mostrar respuesta normal si no hay secciones
+              </div>
               
-              return (
-                <div className="response-container">
-                  <div className="response-header">
-                    <div className="response-header-left">
-                      <h2>
-                        Respuesta de Alex{' '}
-                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                      </h2>
+              {realtimeInfo && (
+                <div className="side-panel-section">
+                  <h3 className="side-panel-title">Info en Tiempo Real</h3>
+                  <div className="realtime-info-compact">
+                    {/* Temperatura */}
+                    {realtimeInfo.temperature !== null && realtimeInfo.temperature !== undefined && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Temperatura</span>
+                        <span className="realtime-info-compact-value">{realtimeInfo.temperature}°C</span>
+                      </div>
+                    )}
+                    
+                    {/* Tipo de cambio */}
+                    {realtimeInfo.exchange_rate && typeof realtimeInfo.exchange_rate === 'object' && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Tipo de Cambio</span>
+                        <span className="realtime-info-compact-value">
+                          {realtimeInfo.exchange_rate.currency_code && (
+                            <>1 USD = {realtimeInfo.exchange_rate.usd_to_dest} {realtimeInfo.exchange_rate.currency_code}</>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Diferencia horaria */}
+                    {realtimeInfo.time_difference && typeof realtimeInfo.time_difference === 'object' && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Diferencia Horaria</span>
+                        <span className="realtime-info-compact-value">
+                          {realtimeInfo.time_difference.difference_string || `${realtimeInfo.time_difference.difference_hours}h`}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Clima */}
+                    {realtimeInfo.weather && typeof realtimeInfo.weather === 'object' && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Clima</span>
+                        <span className="realtime-info-compact-value">
+                          {realtimeInfo.weather.temperatura || realtimeInfo.weather.descripcion || 'N/A'}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Otros valores simples */}
+                    {Object.entries(realtimeInfo).map(([key, value]) => {
+                      // Saltar objetos complejos que ya renderizamos arriba
+                      if (key === 'exchange_rate' || key === 'time_difference' || key === 'weather' || key === 'temperature') {
+                        return null;
+                      }
+                      // Solo renderizar valores primitivos
+                      if (typeof value === 'object' && value !== null) {
+                        return null;
+                      }
+                      return (
+                        <div key={key} className="realtime-info-compact-item">
+                          <span className="realtime-info-compact-label">{key}</span>
+                          <span className="realtime-info-compact-value">{String(value)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* Área de chat principal */}
+          <main className="chat-main">
+            <div className="chat-messages" ref={chatContainerRef}>
+              {/* Mensaje de bienvenida inicial - solo si no hay mensajes en el chat y no se está cargando */}
+              {chatMessages.length === 0 && !loading && question.trim() === '' && (
+                <div className="message message-assistant welcome-message">
+                  <div className="message-avatar">
+                    <Luggage size={24} />
+                  </div>
+                  <div className="message-content">
+                    <div className="message-text">
+                      <p>¡Hola! Soy Alex, tu Consultor Personal de Viajes. 👋</p>
+                      <p>Puedo ayudarte a planificar tu próximo viaje. Solo dime:</p>
+                      <ul>
+                        <li>¿A dónde quieres viajar?</li>
+                        <li>¿Cuál es tu presupuesto?</li>
+                        <li>¿Qué tipo de actividades te interesan?</li>
+                      </ul>
                     </div>
-                    <div className="response-header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                      {weatherInfo && (
-                        <div style={{ marginLeft: '12px' }}>
-                          <div className="weather-header-container">
-                            <div className="weather-header-left">
-                              <Cloud className="weather-main-icon" />
-                              <div className="weather-header-left-content">
-                                <div className="weather-label">Clima Actual en</div>
-                                <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  {weatherInfo.city}
-                                  {formData.destination && response && (
-                                    <button
-                                      type="button"
-                                      className="favorite-toggle-button"
-                                      onClick={saveCurrentAsFavorite}
-                                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '2px',
-                                        borderRadius: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'color 0.2s ease',
-                                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
-                                        lineHeight: 1
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
-                                      }}
-                                    >
-                                      {isFavorite(formData.destination) ? (
-                                        <Heart size={16} fill="currentColor" />
-                                      ) : (
-                                        <Heart size={16} />
+                  </div>
+                </div>
+              )}
+
+              {/* Historial de conversación - todos los mensajes enviados */}
+              {chatMessages.map((msg, msgIndex) => {
+                if (msg.role === 'user') {
+                  return (
+                    <div key={`user-${msgIndex}`} className="message message-user">
+                      <div className="message-content">
+                        <div className="message-text">{msg.content}</div>
+                      </div>
+                      <div className="message-avatar">
+                        <User size={20} />
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })}
+
+              {/* Skeleton loader mientras se carga la respuesta - solo si hay mensajes del usuario esperando respuesta */}
+              {loading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user' && (
+                <div className="message message-assistant">
+                  <div className="message-avatar">
+                    <Luggage size={24} />
+                  </div>
+                  <div className="message-content">
+                    <div className="skeleton-message">
+                      <div className="skeleton skeleton-line" style={{ width: '80%' }}></div>
+                      <div className="skeleton skeleton-line" style={{ width: '60%' }}></div>
+                      <div className="skeleton skeleton-line" style={{ width: '90%' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Respuestas del asistente - todas las respuestas enviadas */}
+              {chatMessages.map((msg, msgIndex) => {
+                if (msg.role === 'assistant') {
+                  // Usar la respuesta actual si es la última y está cargando, sino usar el contenido guardado
+                  const isLastResponse = msgIndex === chatMessages.length - 1 && !loading;
+                  const responseToParse = isLastResponse && response ? response : msg.content;
+                  const parsed = parseResponseSections(responseToParse);
+                  
+                  return (() => {
+                    if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
+                      const sectionKeys = Object.keys(parsed.sections);
+                      const validIndex = Math.min(carouselIndex, sectionKeys.length - 1);
+                      const currentSectionKey = sectionKeys[validIndex];
+                      const currentSectionContent = parsed.sections[currentSectionKey];
+                      const hasMultipleSections = sectionKeys.length > 1;
+                      const resultId = `result-${msgIndex}`;
+                      // Por defecto, los resultados están expandidos (undefined !== false = true)
+                      // Si está explícitamente en false, entonces está colapsado
+                      const isExpanded = expandedResults[resultId] !== false;
+
+                      return (
+                        <div key={`assistant-${msgIndex}`} className="message message-assistant">
+                          <div className="message-avatar">
+                            <Luggage size={24} />
+                          </div>
+                          <div className="message-content">
+                            <div className="result-card">
+                              {/* El encabezado del clima ahora está fijo fuera del área de chat */}
+                              
+                              {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
+
+                              {/* Contenido expandible */}
+                              <div className={`result-content ${isExpanded ? 'expanded' : ''}`}>
+                                {/* Texto antes de las secciones */}
+                                {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
+                                  <div className="result-text">
+                                    {renderPlainText(parsed.beforeText)}
+                                  </div>
+                                )}
+
+                                {/* Carrusel de secciones */}
+                                <div className="result-sections">
+                                  <div className="section-card">
+                                    <div className="section-header">
+                                      <div className="section-title">
+                                        {getSectionIcon(currentSectionKey)}
+                                        <span>{currentSectionKey}</span>
+                                      </div>
+                                      {hasMultipleSections && (
+                                        <div className="section-nav">
+                                          <button
+                                            className="section-nav-btn"
+                                            onClick={() => navigateCarousel('prev')}
+                                            aria-label="Sección anterior"
+                                          >
+                                            <ChevronLeft size={18} />
+                                          </button>
+                                          <span className="section-indicator">
+                                            {validIndex + 1} / {sectionKeys.length}
+                                          </span>
+                                          <button
+                                            className="section-nav-btn"
+                                            onClick={() => navigateCarousel('next')}
+                                            aria-label="Siguiente sección"
+                                          >
+                                            <ChevronRight size={18} />
+                                          </button>
+                                        </div>
                                       )}
-                                    </button>
+                                    </div>
+                                    <div className="section-content" ref={contentScrollRef}>
+                                      {renderSectionContent(currentSectionContent, currentSectionKey)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Texto después de las secciones */}
+                                {parsed.afterText && parsed.afterText.trim().length > 0 && (
+                                  <div className="result-text">
+                                    {renderPlainText(parsed.afterText)}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Botón para expandir/colapsar */}
+                              <button
+                                type="button"
+                                className="expand-btn"
+                                onClick={() => toggleExpandResult(resultId)}
+                              >
+                                {isExpanded ? 'Ver menos' : 'Ver más'}
+                                <ChevronRight size={16} className={isExpanded ? 'rotated' : ''} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // Respuesta simple sin secciones
+                      return (
+                        <div key={`assistant-${msgIndex}`} className="message message-assistant">
+                          <div className="message-avatar">
+                            <Luggage size={24} />
+                          </div>
+                          <div className="message-content">
+                            <div className="result-card">
+                              {/* El encabezado del clima ahora está fijo fuera del área de chat */}
+                              
+                              {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
+                              
+                              <div className="result-content">
+                                <div className="message-text">
+                                  {renderPlainText(msg.content)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                  })();
+                }
+                return null;
+              })}
+
+              {/* Mostrar la última respuesta si está cargando o si no hay mensajes en chatMessages pero sí hay response */}
+              {!loading && response && response.trim().length > 0 && chatMessages.length === 0 && (() => {
+                const parsed = parsedResponse;
+                
+                if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
+                  const sectionKeys = Object.keys(parsed.sections);
+                  const validIndex = Math.min(carouselIndex, sectionKeys.length - 1);
+                  const currentSectionKey = sectionKeys[validIndex];
+                  const currentSectionContent = parsed.sections[currentSectionKey];
+                  const hasMultipleSections = sectionKeys.length > 1;
+                  const resultId = `result-${Date.now()}`;
+                  const isExpanded = expandedResults[resultId] !== false;
+
+                  return (
+                    <div className="message message-assistant">
+                      <div className="message-avatar">
+                        <Luggage size={24} />
+                      </div>
+                      <div className="message-content">
+                        <div className="result-card">
+                          {/* El encabezado del clima ahora está fijo fuera del área de chat */}
+
+                          {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
+
+                          {/* Contenido expandible */}
+                          <div className={`result-content ${isExpanded ? 'expanded' : ''}`}>
+                            {/* Texto antes de las secciones */}
+                            {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
+                              <div className="result-text">
+                                {renderPlainText(parsed.beforeText)}
+                              </div>
+                            )}
+
+                            {/* Carrusel de secciones */}
+                            <div className="result-sections">
+                              <div className="section-card">
+                                <div className="section-header">
+                                  <div className="section-title">
+                                    {getSectionIcon(currentSectionKey)}
+                                    <span>{currentSectionKey}</span>
+                                  </div>
+                                  {hasMultipleSections && (
+                                    <div className="section-nav">
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('prev')}
+                                        aria-label="Sección anterior"
+                                      >
+                                        <ChevronLeft size={18} />
+                                      </button>
+                                      <span className="section-indicator">
+                                        {validIndex + 1} / {sectionKeys.length}
+                                      </span>
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('next')}
+                                        aria-label="Siguiente sección"
+                                      >
+                                        <ChevronRight size={18} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="section-content" ref={contentScrollRef}>
+                                  {renderSectionContent(currentSectionContent, currentSectionKey)}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Texto después de las secciones */}
+                            {parsed.afterText && parsed.afterText.trim().length > 0 && (
+                              <div className="result-text">
+                                {renderPlainText(parsed.afterText)}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Botón para expandir/colapsar */}
+                          <button
+                            type="button"
+                            className="expand-btn"
+                            onClick={() => toggleExpandResult(resultId)}
+                          >
+                            {isExpanded ? 'Ver menos' : 'Ver más'}
+                            <ChevronRight size={16} className={isExpanded ? 'rotated' : ''} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                } else {
+                  // Respuesta simple sin secciones
+                  return (
+                    <div className="message message-assistant">
+                      <div className="message-avatar">
+                        <Luggage size={24} />
+                      </div>
+                      <div className="message-content">
+                        <div className="result-card">
+                          {/* Header completo con clima y favorito */}
+                          {weatherInfo && (
+                            <div className="result-card-header-weather">
+                              <div className="weather-header-container">
+                                <div className="weather-header-left">
+                                  <Cloud className="weather-main-icon" />
+                                  <div className="weather-header-left-content">
+                                    <div className="weather-label">Clima Actual en</div>
+                                    <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      {weatherInfo.city}
+                                      {formData.destination && response && (
+                                        <button
+                                          type="button"
+                                          className="favorite-toggle-button"
+                                          onClick={saveCurrentAsFavorite}
+                                          title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            padding: '2px',
+                                            borderRadius: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            transition: 'color 0.2s ease',
+                                            color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                            lineHeight: 1
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                          }}
+                                        >
+                                          {isFavorite(formData.destination) ? (
+                                            <Heart size={16} fill="currentColor" />
+                                          ) : (
+                                            <Heart size={16} />
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="weather-header-divider"></div>
+                                <div className="weather-header-right">
+                                  {weatherInfo.temperatura && (
+                                    <div className="weather-detail-item">
+                                      <Thermometer size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.temperatura}</span>
+                                    </div>
+                                  )}
+                                  {weatherInfo.condiciones && (
+                                    <div className="weather-detail-item">
+                                      <Cloud size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.condiciones}</span>
+                                    </div>
+                                  )}
+                                  {(weatherInfo.humedad || weatherInfo.viento) && (
+                                    <div className="weather-detail-row">
+                                      {weatherInfo.humedad && (
+                                        <div className="weather-detail-item">
+                                          <Droplets size={14} className="weather-detail-icon" />
+                                          <span>{weatherInfo.humedad}</span>
+                                        </div>
+                                      )}
+                                      {weatherInfo.viento && (
+                                        <div className="weather-detail-item">
+                                          <Wind size={14} className="weather-detail-icon" />
+                                          <span>{weatherInfo.viento}</span>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
                             </div>
-                            <div className="weather-header-divider"></div>
-                            <div className="weather-header-right">
-                              {weatherInfo.temperatura && (
-                                <div className="weather-detail-item">
-                                  <Thermometer size={14} className="weather-detail-icon" />
-                                  <span>{weatherInfo.temperatura}</span>
-                                </div>
-                              )}
-                              {weatherInfo.condiciones && (
-                                <div className="weather-detail-item">
-                                  <Cloud size={14} className="weather-detail-icon" />
-                                  <span>{weatherInfo.condiciones}</span>
-                                </div>
-                              )}
-                              {(weatherInfo.humedad || weatherInfo.viento) && (
-                                <div className="weather-detail-row">
-                                  {weatherInfo.humedad && (
-                                    <div className="weather-detail-item">
-                                      <Droplets size={14} className="weather-detail-icon" />
-                                      <span>{weatherInfo.humedad}</span>
-                                    </div>
-                                  )}
-                                  {weatherInfo.viento && (
-                                    <div className="weather-detail-item">
-                                      <Wind size={14} className="weather-detail-icon" />
-                                      <span>{weatherInfo.viento}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                          )}
+                          
+                          {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
+                          
+                          <div className="result-content">
+                            <div className="message-text">
+                              {renderPlainText(response)}
                             </div>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="response-content">
-                    {/* Mostrar fotos del destino si están disponibles */}
-                    {photos && photos.length > 0 && (
-                      <div className="destination-photos-container">
-                        <div className="destination-photos-header">
-                          <Image size={20} className="photos-icon" />
-                          <h3 className="destination-photos-title">Fotos del Destino</h3>
-                        </div>
-                        <div className="destination-photos-grid">
-                          {photos.map((photo, index) => (
-                            <div key={photo.id || index} className="destination-photo-item">
-                              <a
-                                href={photo.url_full || photo.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="destination-photo-link"
-                                title={photo.description || `Foto de ${photo.photographer}`}
-                              >
-                                <img
-                                  src={photo.url || photo.url_small}
-                                  alt={photo.description || `Foto del destino`}
-                                  className="destination-photo-image"
-                                  loading="lazy"
-                                />
-                                <div className="destination-photo-overlay">
-                                  <div className="destination-photo-credit">
-                                    Foto por {photo.photographer}
-                                  </div>
-                                </div>
-                              </a>
-                            </div>
-                          ))}
-                        </div>
                       </div>
-                    )}
-                    
-                    <div className="response-text">
-                      {renderPlainText(response)}
                     </div>
-                  </div>
+                  );
+                }
+              })()}
+
+              {/* Referencia para scroll automático */}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input fijo en la parte inferior */}
+            <div className="chat-input-container">
+              <form onSubmit={handleSubmit} className="chat-input-form">
+                <div className="chat-input-wrapper">
+                  <textarea
+                    className="chat-input"
+                    placeholder="Escribe tu pregunta aquí... (Ctrl+Enter para enviar)"
+                    value={question}
+                    onChange={(e) => {
+                      // NO limpiar la respuesta cuando el usuario escribe
+                      // La información debe permanecer visible
+                      setQuestion(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        handleSubmit(e);
+                      }
+                    }}
+                    rows="1"
+                    disabled={loading}
+                  />
+                  <button
+                    type="submit"
+                    className="chat-send-btn"
+                    disabled={loading || !question.trim()}
+                    aria-label="Enviar mensaje"
+                  >
+                    {loading ? (
+                      <div className="spinner"></div>
+                    ) : (
+                      <ArrowRight size={20} />
+                    )}
+                  </button>
                 </div>
-              );
-            }
-          })()}
-        </main>
+              </form>
+            </div>
+          </main>
         </div>
-        
-        {/* Contenedor de botones flotantes en la parte inferior derecha - siempre visible */}
+      </div>
+
+      {/* Contenedor de botones flotantes en la parte inferior derecha - siempre visible */}
         <div className="floating-buttons-container">
           {/* Botón para modificar viaje */}
           <div className="floating-button-wrapper">
@@ -3586,7 +3756,7 @@ function App() {
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
