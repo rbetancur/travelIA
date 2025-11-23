@@ -195,16 +195,30 @@ class ConversationHistory:
             'last_message': messages[-1].timestamp.isoformat() if messages else None
         }
     
-    def set_current_destination(self, session_id: str, destination: str) -> None:
+    def set_current_destination(self, session_id: str, destination: str, clear_history_on_change: bool = True) -> None:
         """
         Establece el destino actual de la conversación
         
         Args:
             session_id: ID de la sesión
             destination: Destino en formato "Ciudad, País"
+            clear_history_on_change: Si True, limpia el historial si el destino cambia
         """
         if session_id not in self.conversations:
             self.conversations[session_id] = []
+        
+        # Verificar si el destino está cambiando
+        previous_destination = self.current_destinations.get(session_id)
+        
+        # Comparar destinos (normalizar para comparación)
+        if previous_destination and clear_history_on_change:
+            # Importar aquí para evitar importación circular
+            from destination_detector import compare_destinations
+            if not compare_destinations(previous_destination, destination):
+                # El destino cambió, limpiar el historial
+                print(f"🔄 [HISTORY] Destino cambió de '{previous_destination}' a '{destination}'")
+                print(f"🧹 [HISTORY] Limpiando historial de conversación para sesión {session_id}")
+                self.conversations[session_id] = []
         
         self.current_destinations[session_id] = destination
         print(f"📍 [HISTORY] Destino actual establecido para sesión {session_id}: {destination}")

@@ -1,15 +1,19 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import google.generativeai as genai
 import os
+import unicodedata
+import re
 from prompts import load_prompt
 from weather import WeatherService, extract_destination_from_question, parse_form_destination
 from unsplash import UnsplashService
 from realtime_info import RealtimeInfoService
 from conversation_history import conversation_history
 from destination_detector import detect_destination_change, interpret_confirmation_response
+from pdf_generator import create_pdf
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -162,6 +166,119 @@ class DestinationConfirmation(BaseModel):
 @app.get("/")
 def read_root():
     return {"message": "ViajeIA API is running"}
+
+
+@app.get("/api/itinerary/pdf")
+async def generate_itinerary_pdf(
+    session_id: str,
+    departure_date: Optional[str] = None,
+    return_date: Optional[str] = None
+):
+    """
+    Genera un PDF con el itinerario completo de la conversación.
+    
+    Args:
+        session_id: ID de la sesión de conversación
+        departure_date: Fecha de salida (opcional)
+        return_date: Fecha de regreso (opcional)
+        
+    Returns:
+        PDF file como respuesta HTTP
+    """
+    try:
+        print(f"\n{'='*80}")
+        print(f"📄 [API] Generando PDF de itinerario")
+        print(f"🔑 [API] Session ID: {session_id}")
+        
+        # Obtener historial de conversación
+        messages = conversation_history.get_history(session_id)
+        if not messages:
+            raise HTTPException(
+                status_code=404,
+                detail="No se encontró historial de conversación para esta sesión"
+            )
+        
+        print(f"📚 [API] Historial encontrado: {len(messages)} mensajes")
+        
+        # Obtener destino actual
+        current_destination = conversation_history.get_current_destination(session_id)
+        if not current_destination:
+            # Intentar extraer del historial
+            current_destination = conversation_history.extract_last_destination(session_id)
+            if not current_destination:
+                current_destination = "Destino no especificado"
+        
+        print(f"📍 [API] Destino: {current_destination}")
+        
+        # Obtener fotos del destino (si están disponibles en el historial o necesitamos buscarlas)
+        # Por ahora, intentaremos obtenerlas del último mensaje que las tenga
+        photos = None
+        for msg in reversed(messages):
+            if msg.get('role') == 'assistant':
+                # Las fotos normalmente vienen en las respuestas del backend
+                # Por ahora, las obtendremos del servicio si es necesario
+                pass
+        
+        # Si no hay fotos, intentar obtenerlas del servicio
+        if not photos:
+            from unsplash import UnsplashService
+            unsplash_service = UnsplashService()
+            if unsplash_service.is_available():
+                photos = unsplash_service.get_photos(current_destination, count=6)
+                if photos:
+                    print(f"📸 [API] {len(photos)} fotos obtenidas para el PDF")
+        
+        # Generar PDF
+        pdf_buffer = create_pdf(
+            destination=current_destination,
+            departure_date=departure_date,
+            return_date=return_date,
+            messages=messages,
+            photos=photos
+        )
+        
+        print(f"✅ [API] PDF generado exitosamente")
+        print(f"{'='*80}\n")
+        
+        # Generar nombre de archivo limpio con el destino
+        # Normalizar el nombre del destino: eliminar caracteres especiales y espacios
+        
+        # Normalizar caracteres unicode (quitar tildes, etc.)
+        normalized = unicodedata.normalize('NFD', current_destination)
+        # Eliminar diacríticos (tildes, acentos)
+        cleaned = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+        # Reemplazar comas y espacios por guiones bajos
+        cleaned = cleaned.replace(', ', '_').replace(',', '_').replace(' ', '_')
+        # Eliminar caracteres especiales que no sean letras, números, guiones o guiones bajos
+        cleaned = re.sub(r'[^a-zA-Z0-9_-]', '', cleaned)
+        # Limitar longitud y asegurar que no esté vacío
+        if not cleaned:
+            cleaned = "destino"
+        cleaned = cleaned[:50]  # Limitar a 50 caracteres
+        
+        filename = f"itinerario_{cleaned}.pdf"
+        
+        print(f"📄 [API] Nombre del archivo: {filename}")
+        
+        # Retornar PDF como respuesta
+        return Response(
+            content=pdf_buffer.read(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ [API] Error al generar PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al generar el PDF: {str(e)}"
+        )
 
 
 @app.post("/api/travel", response_model=TravelResponse)

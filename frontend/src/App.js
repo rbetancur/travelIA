@@ -33,7 +33,9 @@ import {
   Globe,
   Radio,
   History,
-  MessageSquare
+  MessageSquare,
+  Download,
+  FileText
 } from 'lucide-react';
 import './App.css';
 
@@ -1567,6 +1569,81 @@ function App() {
     }
   };
 
+  // Función para descargar el itinerario en PDF
+  const handleDownloadItinerary = async () => {
+    if (!sessionId) {
+      alert('No hay una conversación activa para exportar.');
+      return;
+    }
+
+    try {
+      console.log('📄 [PDF] Iniciando descarga de itinerario PDF');
+      console.log('📋 [PDF] Session ID:', sessionId);
+      console.log('📅 [PDF] Fechas:', {
+        departure: formData.departureDate || 'No especificada',
+        return: formData.returnDate || 'No especificada'
+      });
+
+      // Construir URL con parámetros
+      const params = new URLSearchParams({
+        session_id: sessionId
+      });
+      
+      if (formData.departureDate) {
+        params.append('departure_date', formData.departureDate);
+      }
+      if (formData.returnDate) {
+        params.append('return_date', formData.returnDate);
+      }
+
+      const url = `${API_URL}/api/itinerary/pdf?${params.toString()}`;
+      
+      console.log('📤 [PDF] Solicitando PDF desde:', url);
+
+      // Hacer la petición
+      const response = await axios.get(url, {
+        responseType: 'blob', // Importante para descargar archivos
+      });
+
+      console.log('✅ [PDF] PDF recibido, tamaño:', response.data.size, 'bytes');
+
+      // Crear un enlace temporal para descargar
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      // Obtener nombre del archivo del header o usar uno por defecto
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'itinerario_viajeia.pdf';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      console.log('✅ [PDF] Descarga completada:', filename);
+    } catch (error) {
+      console.error('❌ [PDF] Error al descargar PDF:', error);
+      let errorMessage = 'Error al generar el PDF. Por favor, intenta de nuevo.';
+      
+      if (error.response) {
+        errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage = 'No se pudo conectar con el servidor. Por favor, verifica que el backend esté corriendo.';
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
   if (showForm) {
     return (
       <div className="App">
@@ -2211,10 +2288,14 @@ function App() {
                 return (
                   <div className="response-container">
                     <div className="response-header">
-                      <h2>
-                        Respuesta de Alex{' '}
-                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                      </h2>
+                      <div className="response-header-left">
+                        <h2>
+                          Respuesta de Alex{' '}
+                          <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
+                        </h2>
+                      </div>
+                      <div className="response-header-right">
+                      </div>
                     </div>
                     <div className="response-content">
                       <div className="response-text">{response}</div>
@@ -2234,50 +2315,52 @@ function App() {
                         <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
                       </h2>
                     </div>
-                    {weatherInfo && (
-                      <div className="response-header-right">
-                        <div className="weather-header-container">
-                          <div className="weather-header-left">
-                            <Cloud className="weather-main-icon" />
-                            <div className="weather-header-left-content">
-                              <div className="weather-label">Clima Actual en</div>
-                              <div className="weather-city">{weatherInfo.city}</div>
+                    <div className="response-header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      {weatherInfo && (
+                        <div style={{ marginLeft: '12px' }}>
+                          <div className="weather-header-container">
+                            <div className="weather-header-left">
+                              <Cloud className="weather-main-icon" />
+                              <div className="weather-header-left-content">
+                                <div className="weather-label">Clima Actual en</div>
+                                <div className="weather-city">{weatherInfo.city}</div>
+                              </div>
+                            </div>
+                            <div className="weather-header-divider"></div>
+                            <div className="weather-header-right">
+                              {weatherInfo.temperatura && (
+                                <div className="weather-detail-item">
+                                  <Thermometer size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.temperatura}</span>
+                                </div>
+                              )}
+                              {weatherInfo.condiciones && (
+                                <div className="weather-detail-item">
+                                  <Cloud size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.condiciones}</span>
+                                </div>
+                              )}
+                              {(weatherInfo.humedad || weatherInfo.viento) && (
+                                <div className="weather-detail-row">
+                                  {weatherInfo.humedad && (
+                                    <div className="weather-detail-item">
+                                      <Droplets size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.humedad}</span>
+                                    </div>
+                                  )}
+                                  {weatherInfo.viento && (
+                                    <div className="weather-detail-item">
+                                      <Wind size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.viento}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="weather-header-divider"></div>
-                          <div className="weather-header-right">
-                            {weatherInfo.temperatura && (
-                              <div className="weather-detail-item">
-                                <Thermometer size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.temperatura}</span>
-                              </div>
-                            )}
-                            {weatherInfo.condiciones && (
-                              <div className="weather-detail-item">
-                                <Cloud size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.condiciones}</span>
-                              </div>
-                            )}
-                            {(weatherInfo.humedad || weatherInfo.viento) && (
-                              <div className="weather-detail-row">
-                                {weatherInfo.humedad && (
-                                  <div className="weather-detail-item">
-                                    <Droplets size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.humedad}</span>
-                                  </div>
-                                )}
-                                {weatherInfo.viento && (
-                                  <div className="weather-detail-item">
-                                    <Wind size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.viento}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                   <div className="response-content">
                     {/* Mostrar fotos del destino si están disponibles */}
@@ -2405,50 +2488,52 @@ function App() {
                         <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
                       </h2>
                     </div>
-                    {weatherInfo && (
-                      <div className="response-header-right">
-                        <div className="weather-header-container">
-                          <div className="weather-header-left">
-                            <Cloud className="weather-main-icon" />
-                            <div className="weather-header-left-content">
-                              <div className="weather-label">Clima Actual en</div>
-                              <div className="weather-city">{weatherInfo.city}</div>
+                    <div className="response-header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      {weatherInfo && (
+                        <div style={{ marginLeft: '12px' }}>
+                          <div className="weather-header-container">
+                            <div className="weather-header-left">
+                              <Cloud className="weather-main-icon" />
+                              <div className="weather-header-left-content">
+                                <div className="weather-label">Clima Actual en</div>
+                                <div className="weather-city">{weatherInfo.city}</div>
+                              </div>
+                            </div>
+                            <div className="weather-header-divider"></div>
+                            <div className="weather-header-right">
+                              {weatherInfo.temperatura && (
+                                <div className="weather-detail-item">
+                                  <Thermometer size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.temperatura}</span>
+                                </div>
+                              )}
+                              {weatherInfo.condiciones && (
+                                <div className="weather-detail-item">
+                                  <Cloud size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.condiciones}</span>
+                                </div>
+                              )}
+                              {(weatherInfo.humedad || weatherInfo.viento) && (
+                                <div className="weather-detail-row">
+                                  {weatherInfo.humedad && (
+                                    <div className="weather-detail-item">
+                                      <Droplets size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.humedad}</span>
+                                    </div>
+                                  )}
+                                  {weatherInfo.viento && (
+                                    <div className="weather-detail-item">
+                                      <Wind size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.viento}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="weather-header-divider"></div>
-                          <div className="weather-header-right">
-                            {weatherInfo.temperatura && (
-                              <div className="weather-detail-item">
-                                <Thermometer size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.temperatura}</span>
-                              </div>
-                            )}
-                            {weatherInfo.condiciones && (
-                              <div className="weather-detail-item">
-                                <Cloud size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.condiciones}</span>
-                              </div>
-                            )}
-                            {(weatherInfo.humedad || weatherInfo.viento) && (
-                              <div className="weather-detail-row">
-                                {weatherInfo.humedad && (
-                                  <div className="weather-detail-item">
-                                    <Droplets size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.humedad}</span>
-                                  </div>
-                                )}
-                                {weatherInfo.viento && (
-                                  <div className="weather-detail-item">
-                                    <Wind size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.viento}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                   <div className="response-content">
                     {/* Mostrar fotos del destino si están disponibles */}
@@ -2497,90 +2582,120 @@ function App() {
         </main>
         </div>
         
-        {/* Contenedor de botones flotantes en la parte inferior derecha */}
-        {!showForm && (
-          <div className="floating-buttons-container">
-            {/* Botón para modificar viaje */}
-            <div className="floating-button-wrapper">
-              <button
-                type="button"
-                className="floating-button modify-trip-float-button"
-                onClick={() => setShowForm(true)}
-                aria-label="Modificar información del viaje"
-              >
-                <ArrowLeft size={24} className="floating-button-icon" />
-                <span className="floating-button-glow"></span>
-              </button>
-              <div className="floating-tooltip">Modificar viaje</div>
+        {/* Contenedor de botones flotantes en la parte inferior derecha - siempre visible */}
+        <div className="floating-buttons-container">
+          {/* Botón para modificar viaje */}
+          <div className="floating-button-wrapper">
+            <button
+              type="button"
+              className="floating-button modify-trip-float-button"
+              onClick={() => setShowForm(true)}
+              disabled={showForm || !formData.destination || formData.destination.trim() === ''}
+              aria-label="Modificar información del viaje"
+            >
+              <ArrowLeft size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              {showForm || !formData.destination || formData.destination.trim() === '' 
+                ? 'Completa el formulario para habilitar' 
+                : 'Modificar viaje'}
             </div>
+          </div>
 
-            {/* Botón de historial */}
-            <div className="floating-button-wrapper">
-              {conversationHistory.length > 0 && (
-                <span 
-                  className="floating-button-badge-top"
-                  onClick={() => {
+          {/* Botón de historial */}
+          <div className="floating-button-wrapper">
+            {conversationHistory.length > 0 && !(!sessionId || !formData.destination || formData.destination.trim() === '') && (
+              <span 
+                className="floating-button-badge-top"
+                onClick={() => {
+                  if (sessionId && formData.destination && formData.destination.trim() !== '') {
                     setShowHistory(!showHistory);
                     if (!showHistory && sessionId) {
                       loadConversationHistory();
                     }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                  title="Ver historial de conversaciones"
-                >
-                  {conversationHistory.length > 10 ? '+10' : conversationHistory.length}
-                </span>
-              )}
-              <button
-                type="button"
-                className="floating-button history-float-button"
-                onClick={() => {
+                  }
+                }}
+                style={{ cursor: (!sessionId || !formData.destination || formData.destination.trim() === '') ? 'not-allowed' : 'pointer' }}
+                title="Ver historial de conversaciones"
+              >
+                {conversationHistory.length > 10 ? '+10' : conversationHistory.length}
+              </span>
+            )}
+            <button
+              type="button"
+              className="floating-button history-float-button"
+              onClick={() => {
+                if (sessionId && formData.destination && formData.destination.trim() !== '') {
                   setShowHistory(!showHistory);
                   if (!showHistory && sessionId) {
                     loadConversationHistory();
                   }
-                }}
-                aria-label="Ver historial de conversaciones"
+                }
+              }}
+              disabled={!sessionId || !formData.destination || formData.destination.trim() === ''}
+              aria-label="Ver historial de conversaciones"
+            >
+              <History size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              Historial de conversaciones
+              {!sessionId || !formData.destination || formData.destination.trim() === '' ? (
+                <span className="tooltip-badge">No disponible</span>
+              ) : conversationHistory.length > 0 && (
+                <span className="tooltip-badge">
+                  {conversationHistory.length} {conversationHistory.length === 1 ? 'mensaje' : 'mensajes'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Botón de descargar itinerario */}
+          <div className="floating-button-wrapper">
+            <button
+              type="button"
+              className="floating-button download-itinerary-float-button"
+              onClick={handleDownloadItinerary}
+              disabled={!sessionId || !formData.destination || formData.destination.trim() === '' || !response || response.trim() === ''}
+              aria-label="Descargar itinerario en PDF"
+            >
+              <Download size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              Descargar itinerario
+              {!sessionId || !formData.destination || formData.destination.trim() === '' || !response || response.trim() === '' ? (
+                <span className="tooltip-badge">No disponible</span>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Botón flotante para información en tiempo real */}
+          {realtimeInfo && (
+            <div 
+              className="floating-button-wrapper realtime-button-wrapper"
+              onMouseLeave={(e) => {
+                // Si el mouse sale del wrapper y no va al panel, ocultar
+                if (!e.relatedTarget || !e.relatedTarget.closest('.realtime-info-panel-float')) {
+                  setShowRealtimePanel(false);
+                }
+              }}
+            >
+              <button
+                type="button"
+                className="floating-button realtime-info-float-button"
+                onClick={() => setShowRealtimePanel(!showRealtimePanel)}
+                onMouseEnter={() => setShowRealtimePanel(true)}
+                aria-label="Ver información en tiempo real"
               >
-                <History size={24} className="floating-button-icon" />
+                <Radio size={24} className="realtime-live-icon" />
+                <span className="realtime-pulse"></span>
                 <span className="floating-button-glow"></span>
               </button>
-              <div className="floating-tooltip">
-                Historial de conversaciones
-                {conversationHistory.length > 0 && (
-                  <span className="tooltip-badge">
-                    {conversationHistory.length} {conversationHistory.length === 1 ? 'mensaje' : 'mensajes'}
-                  </span>
-                )}
-              </div>
             </div>
-
-            {/* Botón flotante para información en tiempo real */}
-            {realtimeInfo && (
-              <div 
-                className="floating-button-wrapper realtime-button-wrapper"
-                onMouseLeave={(e) => {
-                  // Si el mouse sale del wrapper y no va al panel, ocultar
-                  if (!e.relatedTarget || !e.relatedTarget.closest('.realtime-info-panel-float')) {
-                    setShowRealtimePanel(false);
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  className="floating-button realtime-info-float-button"
-                  onClick={() => setShowRealtimePanel(!showRealtimePanel)}
-                  onMouseEnter={() => setShowRealtimePanel(true)}
-                  aria-label="Ver información en tiempo real"
-                >
-                  <Radio size={24} className="realtime-live-icon" />
-                  <span className="realtime-pulse"></span>
-                  <span className="floating-button-glow"></span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Panel flotante de información en tiempo real (fuera del contenedor de botones) */}
         {realtimeInfo && showRealtimePanel && (
