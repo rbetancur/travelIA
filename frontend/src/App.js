@@ -31,7 +31,9 @@ import {
   Image,
   Clock,
   Globe,
-  Radio
+  Radio,
+  History,
+  MessageSquare
 } from 'lucide-react';
 import './App.css';
 
@@ -79,6 +81,9 @@ function App() {
   const lastFormDataRef = useRef(null);
   const lastTripTypeRef = useRef(null);
   const [isPending, startTransition] = useTransition();
+  const [sessionId, setSessionId] = useState(null);
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
   
   // Función para limpiar texto técnico innecesario (debe estar antes de parseResponseSections)
   const cleanText = useCallback((text) => {
@@ -947,6 +952,22 @@ function App() {
     }
   }, []);
 
+  // Función para cargar el historial de conversación
+  const loadConversationHistory = useCallback(async () => {
+    if (!sessionId) return;
+    
+    try {
+      const result = await axios.post(`${API_URL}/api/conversation/history`, {
+        session_id: sessionId
+      });
+      if (result.data && result.data.messages) {
+        setConversationHistory(result.data.messages);
+      }
+    } catch (error) {
+      console.error('Error al cargar historial de conversación:', error);
+    }
+  }, [sessionId]);
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     
@@ -1000,11 +1021,19 @@ function App() {
     setQuestion(preFilledQuestion);
     setShowForm(false);
     
-    // Si no hay cambios y ya existe una respuesta, conservarla
+    // IMPORTANTE: El caché solo se usa si:
+    // 1. Los datos del formulario NO han cambiado
+    // 2. Ya existe una respuesta previa
+    // 3. Es una petición desde el FORMULARIO (no desde el chat)
     if (!hasChanged && response && response.trim().length > 0) {
+      console.log('💾 [FORMULARIO] Usando respuesta en caché (datos del formulario no cambiaron)');
+      console.log('⚠️ [FORMULARIO] NO se consulta a Gemini - usando respuesta previa');
       // No hacer petición, solo mostrar la respuesta existente
       return;
     }
+    
+    console.log('🔄 [FORMULARIO] Datos del formulario cambiaron o no hay respuesta previa');
+    console.log('✅ [FORMULARIO] Se consultará a Gemini');
     
     // Si hay cambios o no hay respuesta previa, hacer la petición
     setLoading(true);
@@ -1022,13 +1051,25 @@ function App() {
       const result = await axios.post(`${API_URL}/api/travel`, {
         question: preFilledQuestion.trim(),
         destination: formData.destination,  // Enviar destino del formulario
+        session_id: sessionId  // Incluir session_id para mantener historial
       });
+
+      // Actualizar session_id si se devolvió uno nuevo
+      if (result.data.session_id) {
+        setSessionId(result.data.session_id);
+        localStorage.setItem('viajeia_session_id', result.data.session_id);
+      }
 
       setResponse(result.data.answer);
       setWeather(result.data.weather || null);
       setPhotos(result.data.photos || null);
       console.log('🌤️ Clima recibido (formulario):', result.data.weather);
       console.log('📸 Fotos recibidas (formulario):', result.data.photos);
+      
+      // Actualizar historial de conversación
+      if (sessionId) {
+        loadConversationHistory();
+      }
       
       // Obtener información en tiempo real
       if (formData.destination) {
@@ -1400,44 +1441,200 @@ function App() {
     e.preventDefault();
     
     if (!question.trim()) {
+      console.log('⚠️ [CHAT] Pregunta vacía, no se envía');
       return;
     }
 
+    const currentQuestion = question.trim();
+    
+    console.log('🚀 [CHAT] ========================================');
+    console.log('🚀 [CHAT] Usuario hizo click en "Planificar mi viaje"');
+    console.log('🚀 [CHAT] Nueva pregunta enviada:', currentQuestion);
+    console.log('📋 [CHAT] Session ID:', sessionId);
+    console.log('📋 [CHAT] Estado anterior - Response:', response ? response.substring(0, 100) + '...' : 'vacío');
+    console.log('⚠️ [CHAT] IMPORTANTE: Esta es una pregunta de CHAT - SIEMPRE se consulta a Gemini (NO usa caché)');
+    console.log('✅ [CHAT] Consulta a Gemini iniciada por acción del usuario (click en botón)');
+    console.log('🚀 [CHAT] ========================================');
+
+    // IMPORTANTE: Las preguntas del chat SIEMPRE van directo a Gemini, nunca usan caché
+    // Limpiar solo response y photos (específicos de la pregunta)
+    // MANTENER weather y realtimeInfo (relacionados con el destino) si ya existen
     setLoading(true);
     setResponse('');
-    setWeather(null);
     setPhotos(null);
-    setRealtimeInfo(null);
     setCarouselIndex(0);
+    // NO limpiar weather ni realtimeInfo - se mantienen porque son específicos del destino
+    console.log('🧹 [CHAT] Limpiando response y photos para nueva pregunta');
+    console.log('✅ [CHAT] MANTENIENDO weather y realtimeInfo del destino');
 
     try {
-      const result = await axios.post(`${API_URL}/api/travel`, {
-        question: question.trim(),
+      console.log('📤 [CHAT] Enviando petición a /api/travel con:', {
+        question: currentQuestion,
+        session_id: sessionId,
+        destination: null,  // No hay destino del formulario en modo chat
+        is_chat_question: true  // Marca que es pregunta de chat
       });
 
-      setResponse(result.data.answer);
-      setWeather(result.data.weather || null);
-      setPhotos(result.data.photos || null);
-      console.log('🌤️ Clima recibido (pregunta directa):', result.data.weather);
-      console.log('📸 Fotos recibidas (pregunta directa):', result.data.photos);
+      const result = await axios.post(`${API_URL}/api/travel`, {
+        question: currentQuestion,
+        session_id: sessionId,  // Incluir session_id para mantener historial
+        destination: null  // Explícitamente null para indicar que NO es del formulario
+      });
+
+      console.log('✅ [CHAT] Respuesta recibida del servidor');
+      console.log('📦 [CHAT] Datos recibidos:', {
+        hasAnswer: !!result.data.answer,
+        answerLength: result.data.answer?.length || 0,
+        hasWeather: !!result.data.weather,
+        hasPhotos: !!result.data.photos,
+        sessionId: result.data.session_id,
+        requiresConfirmation: result.data.requires_confirmation,
+        detectedDestination: result.data.detected_destination
+      });
+
+      // ============================================================
+      // Manejar confirmación de cambio de destino
+      // ============================================================
+      if (result.data.requires_confirmation) {
+        console.log('❓ [CHAT] Se requiere confirmación de cambio de destino');
+        console.log('📍 [CHAT] Destino detectado:', result.data.detected_destination);
+        console.log('📍 [CHAT] Destino actual:', result.data.current_destination);
+        
+        // Mostrar diálogo de confirmación
+        const userConfirmed = window.confirm(
+          result.data.answer + 
+          "\n\n¿Deseas cambiar el destino a " + result.data.detected_destination + "?"
+        );
+        
+        if (userConfirmed) {
+          console.log('✅ [CHAT] Usuario confirmó cambio de destino');
+          
+          // Confirmar cambio
+          try {
+            const confirmResult = await axios.post(`${API_URL}/api/travel/confirm-destination`, {
+              session_id: sessionId || result.data.session_id,
+              new_destination: result.data.detected_destination,
+              confirmed: true,
+              original_question: currentQuestion
+            });
+            
+            console.log('✅ [CHAT] Confirmación enviada, procesando respuesta');
+            
+            // Si la confirmación retorna una TravelResponse (con answer), procesarla
+            if (confirmResult.data.answer) {
+              // Actualizar session_id si se devolvió uno nuevo
+              if (confirmResult.data.session_id) {
+                setSessionId(confirmResult.data.session_id);
+                localStorage.setItem('viajeia_session_id', confirmResult.data.session_id);
+              }
+              
+              setResponse(confirmResult.data.answer);
+              setPhotos(confirmResult.data.photos || null);
+              
+              if (confirmResult.data.weather) {
+                setWeather(confirmResult.data.weather);
+              }
+              
+              // Actualizar historial
+              if (sessionId || confirmResult.data.session_id) {
+                loadConversationHistory();
+              }
+            } else {
+              // Si solo retorna un mensaje de confirmación
+              setResponse(confirmResult.data.message || 'Destino cambiado exitosamente. Puedes hacer tu pregunta ahora.');
+            }
+            
+            // Limpiar el input
+            setQuestion('');
+          } catch (confirmError) {
+            console.error('❌ [CHAT] Error al confirmar cambio de destino:', confirmError);
+            setResponse('Error al confirmar el cambio de destino. Por favor, intenta de nuevo.');
+          }
+        } else {
+          console.log('❌ [CHAT] Usuario rechazó cambio de destino');
+          
+          // Rechazar cambio
+          try {
+            await axios.post(`${API_URL}/api/travel/confirm-destination`, {
+              session_id: sessionId || result.data.session_id,
+              new_destination: result.data.detected_destination,
+              confirmed: false,
+              original_question: null
+            });
+            
+            setResponse('Se mantiene el destino actual: ' + result.data.current_destination + '. Puedes continuar con tu pregunta.');
+            // NO limpiar el input para que el usuario pueda reformular
+          } catch (rejectError) {
+            console.error('❌ [CHAT] Error al rechazar cambio de destino:', rejectError);
+            setResponse('Error al procesar la respuesta. Por favor, intenta de nuevo.');
+          }
+        }
+        
+        setLoading(false);
+        return; // Salir temprano, ya procesamos la confirmación
+      }
+
+      // Actualizar session_id si se devolvió uno nuevo
+      if (result.data.session_id) {
+        console.log('🔄 [CHAT] Actualizando session_id:', result.data.session_id);
+        setSessionId(result.data.session_id);
+        localStorage.setItem('viajeia_session_id', result.data.session_id);
+      }
+
+      console.log('📝 [CHAT] Respuesta completa (primeros 200 caracteres):', result.data.answer?.substring(0, 200));
       
-      // Intentar extraer destino de la pregunta para obtener información en tiempo real
-      // Por ahora, no lo hacemos para preguntas directas ya que puede no tener destino claro
+      // Actualizar response y photos con la nueva respuesta
+      setResponse(result.data.answer);
+      setPhotos(result.data.photos || null);
+      
+      // Actualizar weather solo si viene nueva información, sino mantener la anterior
+      if (result.data.weather) {
+        console.log('🌤️ [CHAT] Actualizando weather con nueva información');
+        setWeather(result.data.weather);
+      } else {
+        console.log('✅ [CHAT] MANTENIENDO weather anterior (no hay nueva información)');
+        // No hacer nada, mantener weather anterior
+      }
+      
+      console.log('🌤️ [CHAT] Clima recibido:', result.data.weather ? 'nuevo clima' : 'sin clima (manteniendo anterior)');
+      console.log('📸 [CHAT] Fotos recibidas:', result.data.photos ? `${result.data.photos.length} fotos` : 'ninguna');
+      console.log('✅ [CHAT] MANTENIENDO realtimeInfo anterior (específico del destino)');
+      
+      // Actualizar historial de conversación
+      if (sessionId || result.data.session_id) {
+        console.log('📚 [CHAT] Cargando historial de conversación...');
+        loadConversationHistory();
+      }
+      
+      // Limpiar el input después de enviar
+      setQuestion('');
+      
+      console.log('✅ [CHAT] Proceso completado exitosamente');
+      
     } catch (error) {
-      console.error('Error:', error);
+      console.error('❌ [CHAT] Error al procesar la pregunta:', error);
+      console.error('❌ [CHAT] Detalles del error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
       
       if (error.response) {
         // El servidor respondió con un código de error
         errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+        console.error('❌ [CHAT] Error del servidor:', errorMessage);
       } else if (error.request) {
         // La solicitud se hizo pero no se recibió respuesta
         errorMessage = 'No se pudo conectar con el servidor. Por favor, verifica que el backend esté corriendo.';
+        console.error('❌ [CHAT] No se recibió respuesta del servidor');
       }
       
       setResponse(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
+      console.log('🏁 [CHAT] Proceso finalizado, loading = false');
     }
   };
 
@@ -1981,21 +2178,43 @@ function App() {
       <div className="app-layout">
         <div className="container">
           <header className="header">
-          <button 
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="back-to-form-button-header"
-            title="Modificar información del viaje"
-          >
-            <ArrowLeft size={14} />
-            <span>Modificar viaje</span>
-          </button>
-          <h1 className="title">ViajeIA</h1>
-          <p className="subtitle">
-            Alex, tu Consultor Personal de Viajes{' '}
-            <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
-            <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
-          </p>
+          <div className="header-left">
+            <button 
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="back-to-form-button-header"
+              title="Modificar información del viaje"
+            >
+              <ArrowLeft size={14} />
+              <span>Modificar viaje</span>
+            </button>
+          </div>
+          <div className="header-center">
+            <h1 className="title">ViajeIA</h1>
+            <p className="subtitle">
+              Alex, tu Consultor Personal de Viajes{' '}
+              <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
+              <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
+            </p>
+          </div>
+          <div className="header-right">
+            <button
+              type="button"
+              onClick={() => {
+                setShowHistory(!showHistory);
+                if (!showHistory && sessionId) {
+                  loadConversationHistory();
+                }
+              }}
+              className="history-button"
+              title="Ver historial de conversaciones"
+            >
+              <History size={20} />
+              {conversationHistory.length > 0 && (
+                <span className="history-badge">{conversationHistory.length}</span>
+              )}
+            </button>
+          </div>
         </header>
 
         <main className="main-content">
@@ -2006,7 +2225,37 @@ function App() {
                 className="input-field"
                 placeholder="¿A dónde quieres viajar? ¿Cuál es tu presupuesto? ¿Qué tipo de actividades te interesan?"
                 value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  
+                  // IMPORTANTE: Si hay una respuesta previa y el usuario está escribiendo,
+                  // limpiar solo la respuesta y fotos (específicos de la pregunta)
+                  // MANTENER weather y realtimeInfo (relacionados con el destino)
+                  if (response && response.trim().length > 0) {
+                    // Si el usuario está modificando la pregunta, limpiar solo response y photos
+                    if (newValue.trim() !== question.trim()) {
+                      console.log('🧹 [CHAT] Usuario está modificando la pregunta');
+                      console.log('🧹 [CHAT] Limpiando: response y photos (específicos de la pregunta)');
+                      console.log('✅ [CHAT] MANTENIENDO: weather y realtimeInfo (relacionados con el destino)');
+                      setResponse('');
+                      setPhotos(null);
+                      setCarouselIndex(0);
+                      // NO limpiar weather ni realtimeInfo - son específicos del destino
+                    }
+                  }
+                  
+                  // Solo actualizar el estado, NO hacer consultas a Gemini
+                  // Las consultas solo se hacen al hacer click en "Planificar mi viaje"
+                  setQuestion(newValue);
+                }}
+                onKeyDown={(e) => {
+                  // Permitir Enter para enviar, pero solo si se presiona Ctrl+Enter o Cmd+Enter
+                  // Enter solo crea nueva línea
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
                 rows="4"
                 disabled={loading}
               />
@@ -2032,7 +2281,8 @@ function App() {
             </div>
           </form>
 
-          {response && (() => {
+          {/* Solo mostrar respuesta si no está cargando y hay una respuesta válida */}
+          {!loading && response && response.trim().length > 0 && (() => {
             const parsed = parsedResponse;
             
             if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
@@ -2435,6 +2685,149 @@ function App() {
             </div>
               </div>
             )}
+          </div>
+        )}
+        
+        {/* Panel de historial de conversaciones */}
+        {showHistory && (
+          <div className="history-panel-overlay" onClick={() => setShowHistory(false)}>
+            <div className="history-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="history-panel-header">
+                <h3 className="history-panel-title">
+                  <History size={20} />
+                  Historial de Conversaciones
+                </h3>
+                <button
+                  type="button"
+                  className="history-panel-close"
+                  onClick={() => setShowHistory(false)}
+                  aria-label="Cerrar historial"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="history-panel-content">
+                {conversationHistory.length === 0 ? (
+                  <div className="history-empty">
+                    <MessageSquare size={48} />
+                    <p>No hay conversaciones anteriores</p>
+                    <p className="history-empty-subtitle">Las preguntas y respuestas aparecerán aquí</p>
+                  </div>
+                ) : (
+                  <div className="history-messages">
+                    {conversationHistory.map((msg, index) => {
+                      // Parsear respuesta del asistente si es JSON
+                      let displayContent = msg.content;
+                      if (msg.role === 'assistant') {
+                        const parsed = parseResponseSections(msg.content);
+                        if (parsed && parsed.sections) {
+                          // Formatear las secciones de forma legible
+                          const sections = Object.entries(parsed.sections).map(([name, content]) => {
+                            const lines = content.split('\n').filter(line => line.trim());
+                            return `**${name}:**\n${lines.map(line => `• ${line}`).join('\n')}`;
+                          }).join('\n\n');
+                          
+                          displayContent = sections;
+                          if (parsed.beforeText) {
+                            displayContent = parsed.beforeText + '\n\n' + displayContent;
+                          }
+                          if (parsed.afterText) {
+                            displayContent = displayContent + '\n\n' + parsed.afterText;
+                          }
+                        }
+                      }
+                      
+                      return (
+                        <div key={index} className={`history-message history-message-${msg.role}`}>
+                          <div className="history-message-header">
+                            <span className="history-message-role">
+                              {msg.role === 'user' ? '👤 Tú' : '🤖 Alex'}
+                            </span>
+                            {msg.timestamp && (
+                              <span className="history-message-time">
+                                {new Date(msg.timestamp).toLocaleTimeString('es-ES', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </span>
+                            )}
+                          </div>
+                          <div className="history-message-content">
+                            {displayContent.split('\n').map((line, lineIndex) => {
+                              const trimmedLine = line.trim();
+                              
+                              // Procesar markdown básico para títulos de sección
+                              if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
+                                return (
+                                  <div key={lineIndex} style={{ 
+                                    fontWeight: '600', 
+                                    fontSize: '1rem', 
+                                    marginTop: lineIndex > 0 ? '16px' : '0',
+                                    marginBottom: '8px',
+                                    color: '#1e293b'
+                                  }}>
+                                    {trimmedLine.slice(2, -2)}
+                                  </div>
+                                );
+                              }
+                              // Procesar viñetas
+                              if (trimmedLine.startsWith('•')) {
+                                return (
+                                  <div key={lineIndex} style={{ 
+                                    marginLeft: '16px', 
+                                    marginTop: '6px',
+                                    marginBottom: '4px',
+                                    lineHeight: '1.6'
+                                  }}>
+                                    {trimmedLine}
+                                  </div>
+                                );
+                              }
+                              // Líneas vacías
+                              if (trimmedLine === '') {
+                                return <br key={lineIndex} />;
+                              }
+                              // Línea normal
+                              return (
+                                <div key={lineIndex} style={{ 
+                                  marginTop: lineIndex > 0 ? '8px' : '0',
+                                  lineHeight: '1.6'
+                                }}>
+                                  {trimmedLine}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {conversationHistory.length > 0 && (
+                <div className="history-panel-footer">
+                  <button
+                    type="button"
+                    className="history-clear-button"
+                    onClick={async () => {
+                      if (sessionId && window.confirm('¿Estás seguro de que quieres limpiar el historial?')) {
+                        try {
+                          await axios.post(`${API_URL}/api/conversation/clear`, {
+                            session_id: sessionId
+                          });
+                          setConversationHistory([]);
+                          setShowHistory(false);
+                        } catch (error) {
+                          console.error('Error al limpiar historial:', error);
+                        }
+                      }
+                    }}
+                  >
+                    Limpiar historial
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
