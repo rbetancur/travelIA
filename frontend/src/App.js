@@ -35,7 +35,10 @@ import {
   History,
   MessageSquare,
   Download,
-  FileText
+  FileText,
+  Bookmark,
+  Trash2,
+  Heart
 } from 'lucide-react';
 import './App.css';
 
@@ -86,6 +89,11 @@ function App() {
   const [sessionId, setSessionId] = useState(null);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [favoriteToDelete, setFavoriteToDelete] = useState(null);
+  const [deleteAllFavorites, setDeleteAllFavorites] = useState(false);
   
   // Función para limpiar texto técnico innecesario (debe estar antes de parseResponseSections)
   const cleanText = useCallback((text) => {
@@ -970,6 +978,275 @@ function App() {
     }
   }, [sessionId]);
 
+  // Funciones para manejar favoritos
+  const loadFavorites = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('viajeia_favorites');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setFavorites(parsed);
+        console.log('✅ [FAVORITES] Favoritos cargados:', parsed.length);
+      }
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al cargar favoritos:', error);
+      setFavorites([]);
+    }
+  }, []);
+
+  const saveFavorite = useCallback((favorite) => {
+    try {
+      const newFavorites = [...favorites, favorite];
+      localStorage.setItem('viajeia_favorites', JSON.stringify(newFavorites));
+      setFavorites(newFavorites);
+      console.log('✅ [FAVORITES] Favorito guardado:', favorite.destination);
+      return true;
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al guardar favorito:', error);
+      // Si hay error de almacenamiento (probablemente por tamaño), intentar limpiar favoritos antiguos
+      if (error.name === 'QuotaExceededError') {
+        alert('No se pudo guardar el favorito. El almacenamiento está lleno. Intenta eliminar algunos favoritos antiguos.');
+      }
+      return false;
+    }
+  }, [favorites]);
+
+  const removeFavorite = useCallback((id) => {
+    try {
+      const newFavorites = favorites.filter(fav => fav.id !== id);
+      localStorage.setItem('viajeia_favorites', JSON.stringify(newFavorites));
+      setFavorites(newFavorites);
+      console.log('✅ [FAVORITES] Favorito eliminado:', id);
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al eliminar favorito:', error);
+    }
+  }, [favorites]);
+
+  const isFavorite = useCallback((destination) => {
+    if (!destination) return false;
+    return favorites.some(fav => 
+      fav.destination.toLowerCase().trim() === destination.toLowerCase().trim()
+    );
+  }, [favorites]);
+
+  const generatePDFBlob = useCallback(async (sessionId, departureDate, returnDate) => {
+    try {
+      const params = new URLSearchParams({
+        session_id: sessionId
+      });
+      
+      if (departureDate) {
+        params.append('departure_date', departureDate);
+      }
+      if (returnDate) {
+        params.append('return_date', returnDate);
+      }
+
+      const url = `${API_URL}/api/itinerary/pdf?${params.toString()}`;
+      const response = await axios.get(url, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      
+      // Obtener nombre del archivo
+      const contentDisposition = response.headers['content-disposition'] || 
+                                 response.headers['Content-Disposition'];
+      let filename = 'itinerario_viajeia.pdf';
+      
+      if (contentDisposition) {
+        let filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        } else {
+          filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+          if (filenameMatch) {
+            filename = decodeURIComponent(filenameMatch[1]);
+          } else {
+            filenameMatch = contentDisposition.match(/filename=([^;]+)/);
+            if (filenameMatch) {
+              filename = filenameMatch[1].trim().replace(/['"]/g, '');
+            }
+          }
+        }
+      }
+
+      // Convertir blob a base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1]; // Remover el prefijo data:application/pdf;base64,
+          resolve({ base64data, filename, blob });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al generar PDF:', error);
+      throw error;
+    }
+  }, []);
+
+  const autoSaveFavorite = useCallback(async () => {
+    // Solo guardar si hay destino, respuesta y sessionId
+    if (!formData.destination || !response || !sessionId) {
+      console.log('⚠️ [FAVORITES] No se puede guardar automáticamente: faltan datos');
+      return;
+    }
+
+    // Verificar si ya existe este favorito
+    if (isFavorite(formData.destination)) {
+      console.log('ℹ️ [FAVORITES] El destino ya está en favoritos, no se guarda automáticamente');
+      return;
+    }
+
+    try {
+      console.log('💾 [FAVORITES] Guardando favorito automáticamente...');
+      
+      // Generar PDF
+      const pdfData = await generatePDFBlob(
+        sessionId,
+        formData.departureDate,
+        formData.returnDate
+      );
+
+      const favorite = {
+        id: `${Date.now()}_${formData.destination.replace(/\s+/g, '_')}`,
+        destination: formData.destination,
+        departureDate: formData.departureDate || null,
+        returnDate: formData.returnDate || null,
+        pdfBlob: pdfData.base64data,
+        pdfFilename: pdfData.filename,
+        savedAt: new Date().toISOString(),
+        sessionId: sessionId
+      };
+
+      saveFavorite(favorite);
+      console.log('✅ [FAVORITES] Favorito guardado automáticamente');
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al guardar favorito automáticamente:', error);
+    }
+  }, [formData, response, sessionId, isFavorite, generatePDFBlob, saveFavorite]);
+
+  const handleDeleteFavorite = useCallback((favorite) => {
+    setFavoriteToDelete(favorite);
+    setDeleteAllFavorites(false);
+    setShowDeleteModal(true);
+  }, []);
+
+  const saveCurrentAsFavorite = useCallback(async () => {
+    if (!formData.destination || !response || !sessionId) {
+      return;
+    }
+
+    // Si ya es favorito, mostrar modal de confirmación para eliminarlo
+    if (isFavorite(formData.destination)) {
+      const existingFavorite = favorites.find(fav => 
+        fav.destination.toLowerCase().trim() === formData.destination.toLowerCase().trim()
+      );
+      if (existingFavorite) {
+        handleDeleteFavorite(existingFavorite);
+      }
+      return;
+    }
+
+    try {
+      console.log('💾 [FAVORITES] Guardando favorito manualmente...');
+      
+      // Generar PDF
+      const pdfData = await generatePDFBlob(
+        sessionId,
+        formData.departureDate,
+        formData.returnDate
+      );
+
+      const favorite = {
+        id: `${Date.now()}_${formData.destination.replace(/\s+/g, '_')}`,
+        destination: formData.destination,
+        departureDate: formData.departureDate || null,
+        returnDate: formData.returnDate || null,
+        pdfBlob: pdfData.base64data,
+        pdfFilename: pdfData.filename,
+        savedAt: new Date().toISOString(),
+        sessionId: sessionId
+      };
+
+      saveFavorite(favorite);
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al guardar favorito manualmente:', error);
+    }
+  }, [formData, response, sessionId, isFavorite, favorites, generatePDFBlob, saveFavorite, handleDeleteFavorite]);
+
+  const handleDeleteAllFavorites = useCallback(() => {
+    setFavoriteToDelete(null);
+    setDeleteAllFavorites(true);
+    setShowDeleteModal(true);
+  }, []);
+
+  const confirmDeleteFavorite = useCallback(() => {
+    if (deleteAllFavorites) {
+      localStorage.removeItem('viajeia_favorites');
+      setFavorites([]);
+      setShowDeleteModal(false);
+      setDeleteAllFavorites(false);
+      setShowFavorites(false);
+    } else if (favoriteToDelete) {
+      removeFavorite(favoriteToDelete.id);
+      setShowDeleteModal(false);
+      setFavoriteToDelete(null);
+    }
+  }, [favoriteToDelete, deleteAllFavorites, removeFavorite]);
+
+  const cancelDeleteFavorite = useCallback(() => {
+    setShowDeleteModal(false);
+    setFavoriteToDelete(null);
+    setDeleteAllFavorites(false);
+  }, []);
+
+  const downloadFavoritePDF = useCallback((favorite) => {
+    try {
+      // Convertir base64 a blob
+      const byteCharacters = atob(favorite.pdfBlob);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+      // Crear enlace de descarga
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = favorite.pdfFilename || 'itinerario_viajeia.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      console.log('✅ [FAVORITES] PDF descargado:', favorite.pdfFilename);
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al descargar PDF:', error);
+      alert('Error al descargar el PDF. Por favor, intenta de nuevo.');
+    }
+  }, []);
+
+  const loadFavoriteToForm = useCallback((favorite) => {
+    setFormData(prev => ({
+      ...prev,
+      destination: favorite.destination,
+      departureDate: favorite.departureDate || '',
+      returnDate: favorite.returnDate || ''
+    }));
+    setShowFavorites(false);
+    setShowForm(true);
+    console.log('✅ [FAVORITES] Favorito cargado al formulario:', favorite.destination);
+  }, []);
+
+  // Cargar favoritos al iniciar
+  useEffect(() => {
+    loadFavorites();
+  }, [loadFavorites]);
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     
@@ -1071,6 +1348,14 @@ function App() {
       // Actualizar historial de conversación
       if (sessionId) {
         loadConversationHistory();
+      }
+      
+      // Guardar automáticamente como favorito
+      if (result.data.answer && formData.destination) {
+        // Usar setTimeout para no bloquear la UI
+        setTimeout(() => {
+          autoSaveFavorite();
+        }, 1000);
       }
       
       // Obtener información en tiempo real
@@ -1535,6 +1820,15 @@ function App() {
       if (sessionId || result.data.session_id) {
         console.log('📚 [CHAT] Cargando historial de conversación...');
         loadConversationHistory();
+      }
+      
+      // Guardar automáticamente como favorito si hay destino y respuesta
+      const currentSessionId = result.data.session_id || sessionId;
+      if (result.data.answer && formData.destination && currentSessionId) {
+        // Usar setTimeout para no bloquear la UI
+        setTimeout(() => {
+          autoSaveFavorite();
+        }, 1000);
       }
       
       // Limpiar el input después de enviar
@@ -2381,13 +2675,13 @@ function App() {
                 return (
                   <div className="response-container">
                     <div className="response-header">
-                      <div className="response-header-left">
-                        <h2>
-                          Respuesta de Alex{' '}
-                          <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                        </h2>
-                      </div>
-                      <div className="response-header-right">
+                    <div className="response-header-left">
+                      <h2>
+                        Respuesta de Alex{' '}
+                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
+                      </h2>
+                    </div>
+                    <div className="response-header-right">
                       </div>
                     </div>
                     <div className="response-content">
@@ -2416,7 +2710,42 @@ function App() {
                               <Cloud className="weather-main-icon" />
                               <div className="weather-header-left-content">
                                 <div className="weather-label">Clima Actual en</div>
-                                <div className="weather-city">{weatherInfo.city}</div>
+                                <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {weatherInfo.city}
+                                  {formData.destination && response && (
+                                    <button
+                                      type="button"
+                                      className="favorite-toggle-button"
+                                      onClick={saveCurrentAsFavorite}
+                                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.2s ease',
+                                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                        lineHeight: 1
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                      }}
+                                    >
+                                      {isFavorite(formData.destination) ? (
+                                        <Heart size={16} fill="currentColor" />
+                                      ) : (
+                                        <Heart size={16} />
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <div className="weather-header-divider"></div>
@@ -2589,7 +2918,42 @@ function App() {
                               <Cloud className="weather-main-icon" />
                               <div className="weather-header-left-content">
                                 <div className="weather-label">Clima Actual en</div>
-                                <div className="weather-city">{weatherInfo.city}</div>
+                                <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {weatherInfo.city}
+                                  {formData.destination && response && (
+                                    <button
+                                      type="button"
+                                      className="favorite-toggle-button"
+                                      onClick={saveCurrentAsFavorite}
+                                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'color 0.2s ease',
+                                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                        lineHeight: 1
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                      }}
+                                    >
+                                      {isFavorite(formData.destination) ? (
+                                        <Heart size={16} fill="currentColor" />
+                                      ) : (
+                                        <Heart size={16} />
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <div className="weather-header-divider"></div>
@@ -2761,6 +3125,47 @@ function App() {
               {!sessionId || !formData.destination || formData.destination.trim() === '' || !response || response.trim() === '' ? (
                 <span className="tooltip-badge">No disponible</span>
               ) : null}
+            </div>
+          </div>
+
+          {/* Botón de favoritos */}
+          <div className="floating-button-wrapper">
+            {favorites.length > 0 && (
+              <span 
+                className="floating-button-badge-top"
+                onClick={() => {
+                  setShowFavorites(!showFavorites);
+                  if (!showFavorites) {
+                    loadFavorites();
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+                title="Ver mis viajes guardados"
+              >
+                {favorites.length > 10 ? '+10' : favorites.length}
+              </span>
+            )}
+            <button
+              type="button"
+              className="floating-button favorites-float-button"
+              onClick={() => {
+                setShowFavorites(!showFavorites);
+                if (!showFavorites) {
+                  loadFavorites();
+                }
+              }}
+              aria-label="Mis Viajes Guardados"
+            >
+              <Bookmark size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              Mis Viajes Guardados
+              {favorites.length > 0 && (
+                <span className="tooltip-badge">
+                  {favorites.length} {favorites.length === 1 ? 'viaje' : 'viajes'}
+                </span>
+              )}
             </div>
           </div>
 
@@ -3024,6 +3429,159 @@ function App() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Panel de favoritos - Mis Viajes Guardados */}
+        {showFavorites && (
+          <div className="favorites-panel-overlay" onClick={() => setShowFavorites(false)}>
+            <div className="favorites-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="favorites-panel-header">
+                <h3 className="favorites-panel-title">
+                  <Bookmark size={20} />
+                  Mis Viajes Guardados
+                </h3>
+                <button
+                  type="button"
+                  className="favorites-panel-close"
+                  onClick={() => setShowFavorites(false)}
+                  aria-label="Cerrar favoritos"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="favorites-panel-content">
+                {favorites.length === 0 ? (
+                  <div className="favorites-empty">
+                    <Bookmark size={48} />
+                    <p>No hay viajes guardados</p>
+                    <p className="favorites-empty-subtitle">Los destinos que consultes se guardarán automáticamente aquí</p>
+                  </div>
+                ) : (
+                  <div className="favorites-list">
+                    {favorites.map((favorite) => (
+                      <div key={favorite.id} className="favorite-item">
+                        <div className="favorite-item-header">
+                          <div className="favorite-item-destination">
+                            <MapPin size={18} className="favorite-item-icon" />
+                            <div className="favorite-item-info">
+                              <h4 className="favorite-item-title">{favorite.destination}</h4>
+                              {(favorite.departureDate || favorite.returnDate) && (
+                                <div className="favorite-item-dates">
+                                  {favorite.departureDate && (
+                                    <span className="favorite-date">
+                                      <Calendar size={14} />
+                                      Salida: {new Date(favorite.departureDate).toLocaleDateString('es-ES', { 
+                                        day: 'numeric', 
+                                        month: 'short', 
+                                        year: 'numeric' 
+                                      })}
+                                    </span>
+                                  )}
+                                  {favorite.returnDate && (
+                                    <span className="favorite-date">
+                                      <Calendar size={14} />
+                                      Regreso: {new Date(favorite.returnDate).toLocaleDateString('es-ES', { 
+                                        day: 'numeric', 
+                                        month: 'short', 
+                                        year: 'numeric' 
+                                      })}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <div className="favorite-item-saved">
+                                Guardado el {new Date(favorite.savedAt).toLocaleDateString('es-ES', { 
+                                  day: 'numeric', 
+                                  month: 'long', 
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="favorite-item-actions">
+                          <button
+                            type="button"
+                            className="favorite-action-button favorite-load-button"
+                            onClick={() => loadFavoriteToForm(favorite)}
+                            title="Cargar en formulario"
+                          >
+                            <ArrowLeft size={16} />
+                            Cargar
+                          </button>
+                          <button
+                            type="button"
+                            className="favorite-action-button favorite-download-button"
+                            onClick={() => downloadFavoritePDF(favorite)}
+                            title="Descargar PDF"
+                          >
+                            <Download size={16} />
+                            PDF
+                          </button>
+                          <button
+                            type="button"
+                            className="favorite-action-button favorite-delete-button"
+                            onClick={() => handleDeleteFavorite(favorite)}
+                            title="Eliminar favorito"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {favorites.length > 0 && (
+                <div className="favorites-panel-footer">
+                  <button
+                    type="button"
+                    className="favorites-clear-button"
+                    onClick={handleDeleteAllFavorites}
+                  >
+                    Eliminar todos
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmación para eliminar favoritos */}
+        {showDeleteModal && (
+          <div className="delete-modal-overlay" onClick={cancelDeleteFavorite}>
+            <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="delete-modal-header">
+                <AlertCircle size={24} className="delete-modal-icon" />
+                <h3 className="delete-modal-title">Confirmar eliminación</h3>
+              </div>
+              <div className="delete-modal-content">
+                <p>
+                  {deleteAllFavorites
+                    ? '¿Estás seguro de que quieres eliminar todos tus favoritos? Esta acción no se puede deshacer.'
+                    : `¿Estás seguro de que quieres eliminar "${favoriteToDelete?.destination}" de tus favoritos?`}
+                </p>
+              </div>
+              <div className="delete-modal-actions">
+                <button
+                  type="button"
+                  className="delete-modal-cancel"
+                  onClick={cancelDeleteFavorite}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="delete-modal-confirm"
+                  onClick={confirmDeleteFavorite}
+                >
+                  Eliminar
+                </button>
+              </div>
             </div>
           </div>
         )}

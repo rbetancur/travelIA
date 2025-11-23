@@ -3358,6 +3358,392 @@
 }
 
 /* ============================================
+   PANEL DE FAVORITOS - MIS VIAJES GUARDADOS
+   ============================================ */
+.favorites-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.favorites-panel {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 700px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.favorites-panel-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.favorites-panel-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.favorites-panel-close {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.favorites-panel-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.favorites-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.favorites-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #64748b;
+}
+
+.favorites-empty svg {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.favorites-empty p {
+  margin: 8px 0;
+  font-size: 1rem;
+}
+
+.favorites-empty-subtitle {
+  font-size: 0.875rem;
+  opacity: 0.7;
+}
+
+.favorites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.favorite-item {
+  padding: 20px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.favorite-item:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.favorite-item-header {
+  margin-bottom: 16px;
+}
+
+.favorite-item-destination {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.favorite-item-icon {
+  color: #2563eb;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.favorite-item-info {
+  flex: 1;
+}
+
+.favorite-item-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+}
+
+.favorite-item-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.favorite-date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.favorite-date svg {
+  color: #64748b;
+}
+
+.favorite-item-saved {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.favorite-item-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.favorite-action-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.favorite-load-button {
+  background: #2563eb;
+  color: white;
+}
+
+.favorite-load-button:hover {
+  background: #1e40af;
+}
+
+.favorite-download-button {
+  background: #10b981;
+  color: white;
+}
+
+.favorite-download-button:hover {
+  background: #059669;
+}
+
+.favorite-delete-button {
+  background: #ef4444;
+  color: white;
+  padding: 8px 12px;
+}
+
+.favorite-delete-button:hover {
+  background: #dc2626;
+}
+
+.favorites-panel-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.favorites-clear-button {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.favorites-clear-button:hover {
+  background: #dc2626;
+}
+
+.favorite-toggle-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.favorite-toggle-button:hover {
+  background: #f1f5f9;
+}
+
+@media (max-width: 768px) {
+  .favorites-panel {
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: 20px 20px 0 0;
+    margin-top: auto;
+  }
+
+  .favorites-panel-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .favorite-item-actions {
+    flex-wrap: wrap;
+  }
+
+  .favorite-action-button {
+    flex: 1;
+    min-width: 80px;
+  }
+}
+
+/* ============================================
+   MODAL DE CONFIRMACIÓN PARA ELIMINAR
+   ============================================ */
+.delete-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.delete-modal {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+  overflow: hidden;
+}
+
+.delete-modal-header {
+  padding: 24px 24px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.delete-modal-icon {
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.delete-modal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.delete-modal-content {
+  padding: 24px;
+}
+
+.delete-modal-content p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.delete-modal-actions {
+  padding: 20px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  border-top: 1px solid #e2e8f0;
+}
+
+.delete-modal-cancel,
+.delete-modal-confirm {
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.delete-modal-cancel {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.delete-modal-cancel:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.delete-modal-confirm {
+  background: #ef4444;
+  color: white;
+}
+
+.delete-modal-confirm:hover {
+  background: #dc2626;
+}
+
+@media (max-width: 768px) {
+  .delete-modal {
+    max-width: 100%;
+    margin: 20px;
+  }
+
+  .delete-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .delete-modal-cancel,
+  .delete-modal-confirm {
+    width: 100%;
+  }
+}
+
+/* ============================================
    SKELETON LOADERS
    ============================================ */
 
