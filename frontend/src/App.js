@@ -31,7 +31,14 @@ import {
   Image,
   Clock,
   Globe,
-  Radio
+  Radio,
+  History,
+  MessageSquare,
+  Download,
+  FileText,
+  Bookmark,
+  Trash2,
+  Heart
 } from 'lucide-react';
 import './App.css';
 
@@ -73,12 +80,27 @@ function App() {
   const [realtimeInfo, setRealtimeInfo] = useState(null);
   const [loadingRealtimeInfo, setLoadingRealtimeInfo] = useState(false);
   const [showRealtimePanel, setShowRealtimePanel] = useState(false);
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [carouselIndex, setCarouselIndex] = useState(0); // Mantener para compatibilidad con código legacy
+  const [carouselIndices, setCarouselIndices] = useState({}); // Índices por mensaje: { 'result-0': 0, 'result-1': 2, ... }
   const [carouselDirection, setCarouselDirection] = useState('right');
   const contentScrollRef = useRef(null);
+  const sectionScrollRefs = useRef({}); // Refs para cada sección de cada mensaje
   const lastFormDataRef = useRef(null);
   const lastTripTypeRef = useRef(null);
   const [isPending, startTransition] = useTransition();
+  const [sessionId, setSessionId] = useState(null);
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [favoriteToDelete, setFavoriteToDelete] = useState(null);
+  const [deleteAllFavorites, setDeleteAllFavorites] = useState(false);
+  const [showSidePanel, setShowSidePanel] = useState(false);
+  const [expandedResults, setExpandedResults] = useState({});
+  const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const [chatMessages, setChatMessages] = useState([]); // Almacenar mensajes enviados
   
   // Función para limpiar texto técnico innecesario (debe estar antes de parseResponseSections)
   const cleanText = useCallback((text) => {
@@ -452,6 +474,20 @@ function App() {
       };
     }
   }, [response, carouselIndex]);
+
+  // Scroll automático al final del chat cuando hay nuevos mensajes
+  useEffect(() => {
+    if (messagesEndRef.current && chatContainerRef.current) {
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      };
+      
+      // Pequeño delay para asegurar que el DOM se haya actualizado
+      const timeoutId = setTimeout(scrollToBottom, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [response, loading, question]);
 
   // Manejar navegación del carrusel con teclado
   useEffect(() => {
@@ -947,6 +983,291 @@ function App() {
     }
   }, []);
 
+  // Función para cargar el historial de conversación
+  const loadConversationHistory = useCallback(async () => {
+    if (!sessionId) return;
+    
+    try {
+      const result = await axios.post(`${API_URL}/api/conversation/history`, {
+        session_id: sessionId
+      });
+      if (result.data && result.data.messages) {
+        setConversationHistory(result.data.messages);
+      }
+    } catch (error) {
+      console.error('Error al cargar historial de conversación:', error);
+    }
+  }, [sessionId]);
+
+  // Funciones para manejar favoritos
+  const loadFavorites = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('viajeia_favorites');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setFavorites(parsed);
+        console.log('✅ [FAVORITES] Favoritos cargados:', parsed.length);
+      }
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al cargar favoritos:', error);
+      setFavorites([]);
+    }
+  }, []);
+
+  const saveFavorite = useCallback((favorite) => {
+    try {
+      const newFavorites = [...favorites, favorite];
+      localStorage.setItem('viajeia_favorites', JSON.stringify(newFavorites));
+      setFavorites(newFavorites);
+      console.log('✅ [FAVORITES] Favorito guardado:', favorite.destination);
+      return true;
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al guardar favorito:', error);
+      // Si hay error de almacenamiento (probablemente por tamaño), intentar limpiar favoritos antiguos
+      if (error.name === 'QuotaExceededError') {
+        alert('No se pudo guardar el favorito. El almacenamiento está lleno. Intenta eliminar algunos favoritos antiguos.');
+      }
+      return false;
+    }
+  }, [favorites]);
+
+  const removeFavorite = useCallback((id) => {
+    try {
+      const newFavorites = favorites.filter(fav => fav.id !== id);
+      localStorage.setItem('viajeia_favorites', JSON.stringify(newFavorites));
+      setFavorites(newFavorites);
+      console.log('✅ [FAVORITES] Favorito eliminado:', id);
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al eliminar favorito:', error);
+    }
+  }, [favorites]);
+
+  const isFavorite = useCallback((destination) => {
+    if (!destination) return false;
+    return favorites.some(fav => 
+      fav.destination.toLowerCase().trim() === destination.toLowerCase().trim()
+    );
+  }, [favorites]);
+
+  const generatePDFBlob = useCallback(async (sessionId, departureDate, returnDate) => {
+    try {
+      const params = new URLSearchParams({
+        session_id: sessionId
+      });
+      
+      if (departureDate) {
+        params.append('departure_date', departureDate);
+      }
+      if (returnDate) {
+        params.append('return_date', returnDate);
+      }
+
+      const url = `${API_URL}/api/itinerary/pdf?${params.toString()}`;
+      const response = await axios.get(url, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      
+      // Obtener nombre del archivo
+      const contentDisposition = response.headers['content-disposition'] || 
+                                 response.headers['Content-Disposition'];
+      let filename = 'itinerario_viajeia.pdf';
+      
+      if (contentDisposition) {
+        let filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        } else {
+          filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+          if (filenameMatch) {
+            filename = decodeURIComponent(filenameMatch[1]);
+          } else {
+            filenameMatch = contentDisposition.match(/filename=([^;]+)/);
+            if (filenameMatch) {
+              filename = filenameMatch[1].trim().replace(/['"]/g, '');
+            }
+          }
+        }
+      }
+
+      // Convertir blob a base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1]; // Remover el prefijo data:application/pdf;base64,
+          resolve({ base64data, filename, blob });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al generar PDF:', error);
+      throw error;
+    }
+  }, []);
+
+  const autoSaveFavorite = useCallback(async () => {
+    // Solo guardar si hay destino, respuesta y sessionId
+    if (!formData.destination || !response || !sessionId) {
+      console.log('⚠️ [FAVORITES] No se puede guardar automáticamente: faltan datos');
+      return;
+    }
+
+    // Verificar si ya existe este favorito
+    if (isFavorite(formData.destination)) {
+      console.log('ℹ️ [FAVORITES] El destino ya está en favoritos, no se guarda automáticamente');
+      return;
+    }
+
+    try {
+      console.log('💾 [FAVORITES] Guardando favorito automáticamente...');
+      
+      // Generar PDF
+      const pdfData = await generatePDFBlob(
+        sessionId,
+        formData.departureDate,
+        formData.returnDate
+      );
+
+      const favorite = {
+        id: `${Date.now()}_${formData.destination.replace(/\s+/g, '_')}`,
+        destination: formData.destination,
+        departureDate: formData.departureDate || null,
+        returnDate: formData.returnDate || null,
+        pdfBlob: pdfData.base64data,
+        pdfFilename: pdfData.filename,
+        savedAt: new Date().toISOString(),
+        sessionId: sessionId
+      };
+
+      saveFavorite(favorite);
+      console.log('✅ [FAVORITES] Favorito guardado automáticamente');
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al guardar favorito automáticamente:', error);
+    }
+  }, [formData, response, sessionId, isFavorite, generatePDFBlob, saveFavorite]);
+
+  const handleDeleteFavorite = useCallback((favorite) => {
+    setFavoriteToDelete(favorite);
+    setDeleteAllFavorites(false);
+    setShowDeleteModal(true);
+  }, []);
+
+  const saveCurrentAsFavorite = useCallback(async () => {
+    if (!formData.destination || !response || !sessionId) {
+      return;
+    }
+
+    // Si ya es favorito, mostrar modal de confirmación para eliminarlo
+    if (isFavorite(formData.destination)) {
+      const existingFavorite = favorites.find(fav => 
+        fav.destination.toLowerCase().trim() === formData.destination.toLowerCase().trim()
+      );
+      if (existingFavorite) {
+        handleDeleteFavorite(existingFavorite);
+      }
+      return;
+    }
+
+    try {
+      console.log('💾 [FAVORITES] Guardando favorito manualmente...');
+      
+      // Generar PDF
+      const pdfData = await generatePDFBlob(
+        sessionId,
+        formData.departureDate,
+        formData.returnDate
+      );
+
+      const favorite = {
+        id: `${Date.now()}_${formData.destination.replace(/\s+/g, '_')}`,
+        destination: formData.destination,
+        departureDate: formData.departureDate || null,
+        returnDate: formData.returnDate || null,
+        pdfBlob: pdfData.base64data,
+        pdfFilename: pdfData.filename,
+        savedAt: new Date().toISOString(),
+        sessionId: sessionId
+      };
+
+      saveFavorite(favorite);
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al guardar favorito manualmente:', error);
+    }
+  }, [formData, response, sessionId, isFavorite, favorites, generatePDFBlob, saveFavorite, handleDeleteFavorite]);
+
+  const handleDeleteAllFavorites = useCallback(() => {
+    setFavoriteToDelete(null);
+    setDeleteAllFavorites(true);
+    setShowDeleteModal(true);
+  }, []);
+
+  const confirmDeleteFavorite = useCallback(() => {
+    if (deleteAllFavorites) {
+      localStorage.removeItem('viajeia_favorites');
+      setFavorites([]);
+      setShowDeleteModal(false);
+      setDeleteAllFavorites(false);
+      setShowFavorites(false);
+    } else if (favoriteToDelete) {
+      removeFavorite(favoriteToDelete.id);
+      setShowDeleteModal(false);
+      setFavoriteToDelete(null);
+    }
+  }, [favoriteToDelete, deleteAllFavorites, removeFavorite]);
+
+  const cancelDeleteFavorite = useCallback(() => {
+    setShowDeleteModal(false);
+    setFavoriteToDelete(null);
+    setDeleteAllFavorites(false);
+  }, []);
+
+  const downloadFavoritePDF = useCallback((favorite) => {
+    try {
+      // Convertir base64 a blob
+      const byteCharacters = atob(favorite.pdfBlob);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+      // Crear enlace de descarga
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = favorite.pdfFilename || 'itinerario_viajeia.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      console.log('✅ [FAVORITES] PDF descargado:', favorite.pdfFilename);
+    } catch (error) {
+      console.error('❌ [FAVORITES] Error al descargar PDF:', error);
+      alert('Error al descargar el PDF. Por favor, intenta de nuevo.');
+    }
+  }, []);
+
+  const loadFavoriteToForm = useCallback((favorite) => {
+    setFormData(prev => ({
+      ...prev,
+      destination: favorite.destination,
+      departureDate: favorite.departureDate || '',
+      returnDate: favorite.returnDate || ''
+    }));
+    setShowFavorites(false);
+    setShowForm(true);
+    console.log('✅ [FAVORITES] Favorito cargado al formulario:', favorite.destination);
+  }, []);
+
+  // Cargar favoritos al iniciar
+  useEffect(() => {
+    loadFavorites();
+  }, [loadFavorites]);
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     
@@ -997,14 +1318,57 @@ function App() {
       JSON.stringify(currentFormData) !== JSON.stringify(lastFormDataRef.current) ||
       tripType !== lastTripTypeRef.current;
     
-    setQuestion(preFilledQuestion);
+    // Verificar si el destino cambió específicamente
+    const destinationChanged = !lastFormDataRef.current || 
+      (lastFormDataRef.current.destination !== currentFormData.destination);
+    
+    // Verificar si el mensaje ya existe en el historial para evitar duplicados
+    const messageExists = chatMessages.some(msg => 
+      msg.role === 'user' && msg.content === preFilledQuestion.trim()
+    );
+    
+    // Si el destino cambió, limpiar el historial de chat y datos relacionados
+    if (destinationChanged) {
+      console.log('🔄 [FORMULARIO] Destino cambió, limpiando historial de chat');
+      setChatMessages([{ role: 'user', content: preFilledQuestion.trim() }]); // Limpiar y agregar nuevo mensaje
+      setResponse('');
+      setWeather(null);
+      setPhotos(null);
+      setRealtimeInfo(null);
+      setCarouselIndex(0);
+    } else if (!messageExists) {
+      // Si el destino no cambió y el mensaje no existe, agregar el mensaje al historial existente
+      setChatMessages(prev => [...prev, { role: 'user', content: preFilledQuestion.trim() }]);
+    } else {
+      console.log('ℹ️ [FORMULARIO] El mensaje ya existe en el historial, no se duplica');
+    }
+    setQuestion(''); // Limpiar el input
     setShowForm(false);
     
-    // Si no hay cambios y ya existe una respuesta, conservarla
+    // IMPORTANTE: El caché solo se usa si:
+    // 1. Los datos del formulario NO han cambiado
+    // 2. Ya existe una respuesta previa
+    // 3. Es una petición desde el FORMULARIO (no desde el chat)
     if (!hasChanged && response && response.trim().length > 0) {
+      console.log('💾 [FORMULARIO] Usando respuesta en caché (datos del formulario no cambiaron)');
+      console.log('⚠️ [FORMULARIO] NO se consulta a Gemini - usando respuesta previa');
+      // Verificar si la respuesta ya está en el timeline para evitar duplicados
+      const responseExists = chatMessages.some(msg => 
+        msg.role === 'assistant' && msg.content === response
+      );
+      
+      if (!responseExists) {
+        // Agregar la respuesta existente al timeline del chat solo si no existe
+        setChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      } else {
+        console.log('ℹ️ [FORMULARIO] La respuesta ya está en el timeline, no se duplica');
+      }
       // No hacer petición, solo mostrar la respuesta existente
       return;
     }
+    
+    console.log('🔄 [FORMULARIO] Datos del formulario cambiaron o no hay respuesta previa');
+    console.log('✅ [FORMULARIO] Se consultará a Gemini');
     
     // Si hay cambios o no hay respuesta previa, hacer la petición
     setLoading(true);
@@ -1022,13 +1386,37 @@ function App() {
       const result = await axios.post(`${API_URL}/api/travel`, {
         question: preFilledQuestion.trim(),
         destination: formData.destination,  // Enviar destino del formulario
+        session_id: sessionId  // Incluir session_id para mantener historial
       });
+
+      // Actualizar session_id si se devolvió uno nuevo
+      if (result.data.session_id) {
+        setSessionId(result.data.session_id);
+        localStorage.setItem('viajeia_session_id', result.data.session_id);
+      }
 
       setResponse(result.data.answer);
       setWeather(result.data.weather || null);
       setPhotos(result.data.photos || null);
+      
+      // Agregar la respuesta del asistente al timeline del chat
+      setChatMessages(prev => [...prev, { role: 'assistant', content: result.data.answer }]);
+      
       console.log('🌤️ Clima recibido (formulario):', result.data.weather);
       console.log('📸 Fotos recibidas (formulario):', result.data.photos);
+      
+      // Actualizar historial de conversación
+      if (sessionId) {
+        loadConversationHistory();
+      }
+      
+      // Guardar automáticamente como favorito
+      if (result.data.answer && formData.destination) {
+        // Usar setTimeout para no bloquear la UI
+        setTimeout(() => {
+          autoSaveFavorite();
+        }, 1000);
+      }
       
       // Obtener información en tiempo real
       if (formData.destination) {
@@ -1376,7 +1764,43 @@ function App() {
   };
 
   // Función para navegar el carrusel
-  const navigateCarousel = (direction) => {
+  const navigateCarousel = (direction, resultId = null, currentContent = null) => {
+    // Si se proporciona resultId y currentContent, usar el contenido específico del mensaje
+    if (resultId && currentContent) {
+      const parsed = parseResponseSections(currentContent);
+      if (!parsed || !parsed.sections) return;
+      
+      const sectionKeys = Object.keys(parsed.sections);
+      if (sectionKeys.length === 0) return;
+      
+      setCarouselDirection(direction === 'next' ? 'right' : 'left');
+      
+      setCarouselIndices((prevIndices) => {
+        const currentIndex = prevIndices[resultId] || 0;
+        let newIndex;
+        if (direction === 'next') {
+          newIndex = (currentIndex + 1) % sectionKeys.length;
+        } else {
+          newIndex = (currentIndex - 1 + sectionKeys.length) % sectionKeys.length;
+        }
+        
+        // Hacer scroll al inicio cuando se cambia de página
+        setTimeout(() => {
+          const scrollRef = sectionScrollRefs.current[resultId];
+          if (scrollRef && scrollRef.current) {
+            scrollRef.current.scrollTop = 0;
+          }
+        }, 0);
+        
+        return {
+          ...prevIndices,
+          [resultId]: newIndex
+        };
+      });
+      return;
+    }
+    
+    // Código legacy para compatibilidad
     if (!response) return;
     
     const parsed = parseResponseSections(response);
@@ -1396,48 +1820,250 @@ function App() {
     });
   };
 
+  // Función para alternar expansión de resultados
+  const toggleExpandResult = (resultId) => {
+    setExpandedResults(prev => ({
+      ...prev,
+      [resultId]: !prev[resultId]
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!question.trim()) {
+      console.log('⚠️ [CHAT] Pregunta vacía, no se envía');
       return;
     }
 
+    const currentQuestion = question.trim();
+    
+    // Agregar el mensaje del usuario a la conversación solo cuando se envía
+    setChatMessages(prev => [...prev, { role: 'user', content: currentQuestion }]);
+    
+    // Limpiar el input después de agregar el mensaje
+    setQuestion('');
+    
+    console.log('🚀 [CHAT] ========================================');
+    console.log('🚀 [CHAT] Usuario hizo click en "Planificar mi viaje"');
+    console.log('🚀 [CHAT] Nueva pregunta enviada:', currentQuestion);
+    console.log('📋 [CHAT] Session ID:', sessionId);
+    console.log('📋 [CHAT] Estado anterior - Response:', response ? response.substring(0, 100) + '...' : 'vacío');
+    console.log('⚠️ [CHAT] IMPORTANTE: Esta es una pregunta de CHAT - SIEMPRE se consulta a Gemini (NO usa caché)');
+    console.log('✅ [CHAT] Consulta a Gemini iniciada por acción del usuario (click en botón)');
+    console.log('🚀 [CHAT] ========================================');
+
+    // IMPORTANTE: Las preguntas del chat SIEMPRE van directo a Gemini, nunca usan caché
+    // Limpiar solo response y photos (específicos de la pregunta)
+    // MANTENER weather y realtimeInfo (relacionados con el destino) si ya existen
     setLoading(true);
     setResponse('');
-    setWeather(null);
     setPhotos(null);
-    setRealtimeInfo(null);
     setCarouselIndex(0);
+    // NO limpiar weather ni realtimeInfo - se mantienen porque son específicos del destino
+    console.log('🧹 [CHAT] Limpiando response y photos para nueva pregunta');
+    console.log('✅ [CHAT] MANTENIENDO weather y realtimeInfo del destino');
 
     try {
-      const result = await axios.post(`${API_URL}/api/travel`, {
-        question: question.trim(),
+      console.log('📤 [CHAT] Enviando petición a /api/travel con:', {
+        question: currentQuestion,
+        session_id: sessionId,
+        destination: null,  // No hay destino del formulario en modo chat
+        is_chat_question: true  // Marca que es pregunta de chat
       });
 
-      setResponse(result.data.answer);
-      setWeather(result.data.weather || null);
-      setPhotos(result.data.photos || null);
-      console.log('🌤️ Clima recibido (pregunta directa):', result.data.weather);
-      console.log('📸 Fotos recibidas (pregunta directa):', result.data.photos);
+      const result = await axios.post(`${API_URL}/api/travel`, {
+        question: currentQuestion,
+        session_id: sessionId,  // Incluir session_id para mantener historial
+        destination: null  // Explícitamente null para indicar que NO es del formulario
+      });
+
+      console.log('✅ [CHAT] Respuesta recibida del servidor');
+      console.log('📦 [CHAT] Datos recibidos:', {
+        hasAnswer: !!result.data.answer,
+        answerLength: result.data.answer?.length || 0,
+        hasWeather: !!result.data.weather,
+        hasPhotos: !!result.data.photos,
+        sessionId: result.data.session_id,
+        requiresConfirmation: result.data.requires_confirmation,
+        detectedDestination: result.data.detected_destination
+      });
+
+      // ============================================================
+      // Confirmación interactiva: El mensaje de confirmación se muestra en el chat
+      // El usuario responderá en el siguiente mensaje y el backend lo procesará automáticamente
+      // ============================================================
+      if (result.data.response_format === "confirmation") {
+        console.log('❓ [CHAT] Mensaje de confirmación recibido (se mostrará en el chat)');
+        console.log('📍 [CHAT] Destino detectado:', result.data.detected_destination);
+        console.log('📍 [CHAT] Destino actual:', result.data.current_destination);
+        // El mensaje se mostrará normalmente en el chat, no se requiere acción especial
+      }
+
+      // Actualizar session_id si se devolvió uno nuevo
+      if (result.data.session_id) {
+        console.log('🔄 [CHAT] Actualizando session_id:', result.data.session_id);
+        setSessionId(result.data.session_id);
+        localStorage.setItem('viajeia_session_id', result.data.session_id);
+      }
+
+      console.log('📝 [CHAT] Respuesta completa (primeros 200 caracteres):', result.data.answer?.substring(0, 200));
       
-      // Intentar extraer destino de la pregunta para obtener información en tiempo real
-      // Por ahora, no lo hacemos para preguntas directas ya que puede no tener destino claro
+      // Actualizar response y photos con la nueva respuesta
+      setResponse(result.data.answer);
+      setPhotos(result.data.photos || null);
+      
+      // Agregar la respuesta del asistente a la conversación
+      setChatMessages(prev => [...prev, { role: 'assistant', content: result.data.answer }]);
+      
+      // Actualizar weather solo si viene nueva información, sino mantener la anterior
+      if (result.data.weather) {
+        console.log('🌤️ [CHAT] Actualizando weather con nueva información');
+        setWeather(result.data.weather);
+      } else {
+        console.log('✅ [CHAT] MANTENIENDO weather anterior (no hay nueva información)');
+        // No hacer nada, mantener weather anterior
+      }
+      
+      console.log('🌤️ [CHAT] Clima recibido:', result.data.weather ? 'nuevo clima' : 'sin clima (manteniendo anterior)');
+      console.log('📸 [CHAT] Fotos recibidas:', result.data.photos ? `${result.data.photos.length} fotos` : 'ninguna');
+      console.log('✅ [CHAT] MANTENIENDO realtimeInfo anterior (específico del destino)');
+      
+      // Actualizar historial de conversación
+      if (sessionId || result.data.session_id) {
+        console.log('📚 [CHAT] Cargando historial de conversación...');
+        loadConversationHistory();
+      }
+      
+      // Guardar automáticamente como favorito si hay destino y respuesta
+      const currentSessionId = result.data.session_id || sessionId;
+      if (result.data.answer && formData.destination && currentSessionId) {
+        // Usar setTimeout para no bloquear la UI
+        setTimeout(() => {
+          autoSaveFavorite();
+        }, 1000);
+      }
+      
+      console.log('✅ [CHAT] Proceso completado exitosamente');
+      
     } catch (error) {
-      console.error('Error:', error);
+      console.error('❌ [CHAT] Error al procesar la pregunta:', error);
+      console.error('❌ [CHAT] Detalles del error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
       let errorMessage = 'Lo siento, hubo un error al procesar tu solicitud. Por favor, intenta de nuevo.';
       
       if (error.response) {
         // El servidor respondió con un código de error
         errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+        console.error('❌ [CHAT] Error del servidor:', errorMessage);
       } else if (error.request) {
         // La solicitud se hizo pero no se recibió respuesta
         errorMessage = 'No se pudo conectar con el servidor. Por favor, verifica que el backend esté corriendo.';
+        console.error('❌ [CHAT] No se recibió respuesta del servidor');
       }
       
       setResponse(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
+      console.log('🏁 [CHAT] Proceso finalizado, loading = false');
+    }
+  };
+
+  // Función para descargar el itinerario en PDF
+  const handleDownloadItinerary = async () => {
+    if (!sessionId) {
+      alert('No hay una conversación activa para exportar.');
+      return;
+    }
+
+    try {
+      console.log('📄 [PDF] Iniciando descarga de itinerario PDF');
+      console.log('📋 [PDF] Session ID:', sessionId);
+      console.log('📅 [PDF] Fechas:', {
+        departure: formData.departureDate || 'No especificada',
+        return: formData.returnDate || 'No especificada'
+      });
+
+      // Construir URL con parámetros
+      const params = new URLSearchParams({
+        session_id: sessionId
+      });
+      
+      if (formData.departureDate) {
+        params.append('departure_date', formData.departureDate);
+      }
+      if (formData.returnDate) {
+        params.append('return_date', formData.returnDate);
+      }
+
+      const url = `${API_URL}/api/itinerary/pdf?${params.toString()}`;
+      
+      console.log('📤 [PDF] Solicitando PDF desde:', url);
+
+      // Hacer la petición
+      const response = await axios.get(url, {
+        responseType: 'blob', // Importante para descargar archivos
+      });
+
+      console.log('✅ [PDF] PDF recibido, tamaño:', response.data.size, 'bytes');
+
+      // Crear un enlace temporal para descargar
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      // Obtener nombre del archivo del header o usar uno por defecto
+      const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+      let filename = 'itinerario_viajeia.pdf';
+      
+      console.log('📋 [PDF] Content-Disposition header:', contentDisposition);
+      
+      if (contentDisposition) {
+        // Intentar múltiples formatos de Content-Disposition
+        // Formato 1: filename="nombre.pdf"
+        let filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        } else {
+          // Formato 2: filename*=UTF-8''nombre.pdf
+          filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+          if (filenameMatch) {
+            filename = decodeURIComponent(filenameMatch[1]);
+          } else {
+            // Formato 3: filename=nombre.pdf (sin comillas)
+            filenameMatch = contentDisposition.match(/filename=([^;]+)/);
+            if (filenameMatch) {
+              filename = filenameMatch[1].trim().replace(/['"]/g, '');
+            }
+          }
+        }
+      }
+      
+      console.log('📄 [PDF] Nombre del archivo extraído:', filename);
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      console.log('✅ [PDF] Descarga completada:', filename);
+    } catch (error) {
+      console.error('❌ [PDF] Error al descargar PDF:', error);
+      let errorMessage = 'Error al generar el PDF. Por favor, intenta de nuevo.';
+      
+      if (error.response) {
+        errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage = 'No se pudo conectar con el servidor. Por favor, verifica que el backend esté corriendo.';
+      }
+      
+      alert(errorMessage);
     }
   };
 
@@ -1976,469 +2602,1403 @@ function App() {
     );
   }
 
+
   return (
+    <>
     <div className="App">
-      <div className="app-layout">
-        <div className="container">
-          <header className="header">
-          <button 
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="back-to-form-button-header"
-            title="Modificar información del viaje"
-          >
-            <ArrowLeft size={14} />
-            <span>Modificar viaje</span>
-          </button>
-          <h1 className="title">ViajeIA</h1>
-          <p className="subtitle">
-            Alex, tu Consultor Personal de Viajes{' '}
-            <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
-            <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
-          </p>
-        </header>
-
-        <main className="main-content">
-
-          <form onSubmit={handleSubmit} className="form">
-            <div className="input-group">
-              <textarea
-                className="input-field"
-                placeholder="¿A dónde quieres viajar? ¿Cuál es tu presupuesto? ¿Qué tipo de actividades te interesan?"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                rows="4"
-                disabled={loading}
-              />
-            </div>
-            
-            <div className="form-actions">
-              <button 
-                type="submit" 
-                className="submit-button"
-                disabled={loading || !question.trim()}
-              >
-                {loading ? (
-                  <>
-                    <span>Planificando...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Planificar mi viaje</span>
-                    <ArrowRight size={18} />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-
-          {response && (() => {
-            const parsed = parsedResponse;
-            
-            if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
-              // Mostrar carrusel si hay secciones
-              const sectionKeys = Object.keys(parsed.sections);
-              const validIndex = Math.min(carouselIndex, sectionKeys.length - 1);
-              const currentSectionKey = sectionKeys[validIndex];
-              const currentSectionContent = parsed.sections[currentSectionKey];
-
-              if (!currentSectionKey || !currentSectionContent) {
-                // Si no hay sección válida, mostrar respuesta normal
-                return (
-                  <div className="response-container">
-                    <div className="response-header">
-                      <h2>
-                        Respuesta de Alex{' '}
-                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                      </h2>
-                    </div>
-                    <div className="response-content">
-                      <div className="response-text">{response}</div>
-                    </div>
-                  </div>
-                );
-              }
-
-              const hasMultipleSections = sectionKeys.length > 1;
-
-              return (
-                <div className="response-container">
-                  <div className="response-header">
-                    <div className="response-header-left">
-                      <h2>
-                        Respuesta de Alex{' '}
-                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                      </h2>
-                    </div>
-                    {weatherInfo && (
-                      <div className="response-header-right">
-                        <div className="weather-header-container">
-                          <div className="weather-header-left">
-                            <Cloud className="weather-main-icon" />
-                            <div className="weather-header-left-content">
-                              <div className="weather-label">Clima Actual en</div>
-                              <div className="weather-city">{weatherInfo.city}</div>
-                            </div>
-                          </div>
-                          <div className="weather-header-divider"></div>
-                          <div className="weather-header-right">
-                            {weatherInfo.temperatura && (
-                              <div className="weather-detail-item">
-                                <Thermometer size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.temperatura}</span>
-                              </div>
-                            )}
-                            {weatherInfo.condiciones && (
-                              <div className="weather-detail-item">
-                                <Cloud size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.condiciones}</span>
-                              </div>
-                            )}
-                            {(weatherInfo.humedad || weatherInfo.viento) && (
-                              <div className="weather-detail-row">
-                                {weatherInfo.humedad && (
-                                  <div className="weather-detail-item">
-                                    <Droplets size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.humedad}</span>
-                                  </div>
-                                )}
-                                {weatherInfo.viento && (
-                                  <div className="weather-detail-item">
-                                    <Wind size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.viento}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="response-content">
-                    {/* Mostrar fotos del destino si están disponibles */}
-                    {photos && photos.length > 0 && (
-                      <div className="destination-photos-container">
-                        <div className="destination-photos-header">
-                          <Image size={20} className="photos-icon" />
-                          <h3 className="destination-photos-title">Fotos del Destino</h3>
-                        </div>
-                        <div className="destination-photos-grid">
-                          {photos.map((photo, index) => (
-                            <div key={photo.id || index} className="destination-photo-item">
-                              <a
-                                href={photo.url_full || photo.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="destination-photo-link"
-                                title={photo.description || `Foto de ${photo.photographer}`}
+      <div className="chat-layout">
+        {/* Header fijo */}
+        <header className="chat-header">
+          <div className="chat-header-content">
+            <div className="chat-header-left">
+              <div className="chat-header-title-section">
+                <h1 className="chat-title">ViajeIA</h1>
+                <p className="chat-subtitle">
+                  Alex, tu Consultor Personal de Viajes
+                </p>
+              </div>
+              {/* Información del clima debajo del nombre en pantallas pequeñas */}
+              <div className="header-weather-info-mobile">
+                {/* Información del clima en el header - widget completo si hay weatherInfo */}
+                {weatherInfo && (
+                  <div className="header-weather-info">
+                    <div className="weather-header-container">
+                      <div className="weather-header-left">
+                        <Cloud className="weather-main-icon" />
+                        <div className="weather-header-left-content">
+                          <div className="weather-label">Clima Actual en</div>
+                          <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {weatherInfo.city}
+                            {formData.destination && (
+                              <button
+                                type="button"
+                                className="favorite-toggle-button"
+                                onClick={saveCurrentAsFavorite}
+                                title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  borderRadius: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'color 0.2s ease',
+                                  color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                  lineHeight: 1
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                }}
                               >
-                                <img
-                                  src={photo.url || photo.url_small}
-                                  alt={photo.description || `Foto del destino`}
-                                  className="destination-photo-image"
-                                  loading="lazy"
-                                />
-                                <div className="destination-photo-overlay">
-                                  <div className="destination-photo-credit">
-                                    Foto por {photo.photographer}
-                                  </div>
-                                </div>
-                              </a>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Mostrar texto antes de las secciones solo si contiene información útil */}
-                    {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
-                      <div className="response-text response-text-before">
-                        {renderPlainText(parsed.beforeText)}
-                      </div>
-                    )}
-                    
-                    {/* Carrusel con las secciones */}
-                    <div className="carousel-container">
-                      <div className="carousel-slide">
-                        <div className={`carousel-card ${carouselDirection === 'left' ? 'slide-left' : ''}`} key={validIndex}>
-                          <div className="carousel-section-header">
-                            <div className="carousel-section-header-left">
-                              {hasMultipleSections && (
-                                <button
-                                  className="carousel-button carousel-button-left"
-                                  onClick={() => navigateCarousel('prev')}
-                                  aria-label="Sección anterior"
-                                >
-                                  <ChevronLeft size={18} />
-                                </button>
-                              )}
-                              <h3 className="carousel-section-title">
-                                <span className="carousel-section-icon">
-                                  {getSectionIcon(currentSectionKey)}
-                                </span>
-                                {currentSectionKey}
-                              </h3>
-                            </div>
-                            <div className="carousel-section-header-right">
-                              {hasMultipleSections && (
-                                <>
-                                  <div className="carousel-indicator">
-                                    {validIndex + 1} / {sectionKeys.length}
-                                  </div>
-                                  <button
-                                    className="carousel-button carousel-button-right"
-                                    onClick={() => navigateCarousel('next')}
-                                    aria-label="Siguiente sección"
-                                  >
-                                    <ChevronRight size={18} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div 
-                            className="carousel-section-content"
-                            ref={contentScrollRef}
-                          >
-                            {renderSectionContent(currentSectionContent, currentSectionKey)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {hasMultipleSections && (
-                      <div className="carousel-dots">
-                        {sectionKeys.map((_, index) => (
-                          <button
-                            key={index}
-                            className={`carousel-dot ${index === validIndex ? 'active' : ''}`}
-                            onClick={() => setCarouselIndex(index)}
-                            aria-label={`Ir a sección ${index + 1}`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Mostrar texto después de las secciones solo si contiene información útil */}
-                    {parsed.afterText && parsed.afterText.trim().length > 0 && (
-                      <div className="response-text response-text-after">
-                        {renderPlainText(parsed.afterText)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            } else {
-              // Mostrar respuesta normal si no hay secciones
-              
-              return (
-                <div className="response-container">
-                  <div className="response-header">
-                    <div className="response-header-left">
-                      <h2>
-                        Respuesta de Alex{' '}
-                        <Luggage size={24} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }} />
-                      </h2>
-                    </div>
-                    {weatherInfo && (
-                      <div className="response-header-right">
-                        <div className="weather-header-container">
-                          <div className="weather-header-left">
-                            <Cloud className="weather-main-icon" />
-                            <div className="weather-header-left-content">
-                              <div className="weather-label">Clima Actual en</div>
-                              <div className="weather-city">{weatherInfo.city}</div>
-                            </div>
-                          </div>
-                          <div className="weather-header-divider"></div>
-                          <div className="weather-header-right">
-                            {weatherInfo.temperatura && (
-                              <div className="weather-detail-item">
-                                <Thermometer size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.temperatura}</span>
-                              </div>
-                            )}
-                            {weatherInfo.condiciones && (
-                              <div className="weather-detail-item">
-                                <Cloud size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.condiciones}</span>
-                              </div>
-                            )}
-                            {(weatherInfo.humedad || weatherInfo.viento) && (
-                              <div className="weather-detail-row">
-                                {weatherInfo.humedad && (
-                                  <div className="weather-detail-item">
-                                    <Droplets size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.humedad}</span>
-                                  </div>
+                                {isFavorite(formData.destination) ? (
+                                  <Heart size={16} fill="currentColor" />
+                                ) : (
+                                  <Heart size={16} />
                                 )}
-                                {weatherInfo.viento && (
-                                  <div className="weather-detail-item">
-                                    <Wind size={14} className="weather-detail-icon" />
-                                    <span>{weatherInfo.viento}</span>
-                                  </div>
-                                )}
-                              </div>
+                              </button>
                             )}
                           </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                  <div className="response-content">
-                    {/* Mostrar fotos del destino si están disponibles */}
-                    {photos && photos.length > 0 && (
-                      <div className="destination-photos-container">
-                        <div className="destination-photos-header">
-                          <Image size={20} className="photos-icon" />
-                          <h3 className="destination-photos-title">Fotos del Destino</h3>
-                        </div>
-                        <div className="destination-photos-grid">
-                          {photos.map((photo, index) => (
-                            <div key={photo.id || index} className="destination-photo-item">
-                              <a
-                                href={photo.url_full || photo.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="destination-photo-link"
-                                title={photo.description || `Foto de ${photo.photographer}`}
-                              >
-                                <img
-                                  src={photo.url || photo.url_small}
-                                  alt={photo.description || `Foto del destino`}
-                                  className="destination-photo-image"
-                                  loading="lazy"
-                                />
-                                <div className="destination-photo-overlay">
-                                  <div className="destination-photo-credit">
-                                    Foto por {photo.photographer}
-                                  </div>
-                                </div>
-                              </a>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="response-text">
-                      {renderPlainText(response)}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-          })()}
-        </main>
-        </div>
-        
-        {/* Botón flotante para información en tiempo real */}
-        {realtimeInfo && !showForm && (
-          <div className="realtime-info-wrapper">
-            <button
-              type="button"
-              className="realtime-info-float-button"
-              onClick={() => setShowRealtimePanel(!showRealtimePanel)}
-              onMouseEnter={() => setShowRealtimePanel(true)}
-              aria-label="Ver información en tiempo real"
-              title="Información en tiempo real"
-            >
-              <Radio size={24} className="realtime-live-icon" />
-              <span className="realtime-pulse"></span>
-            </button>
-            
-            {/* Panel flotante de información en tiempo real */}
-            {showRealtimePanel && (
-              <div 
-                className="realtime-info-panel-float"
-                onMouseEnter={() => setShowRealtimePanel(true)}
-                onMouseLeave={() => setShowRealtimePanel(false)}
-              >
-                <div className="realtime-info-header">
-                  <h3 className="realtime-info-title">Información en Tiempo Real</h3>
-                  <button
-                    type="button"
-                    className="realtime-info-close"
-                    onClick={() => setShowRealtimePanel(false)}
-                    aria-label="Cerrar panel"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-            
-            <div className="realtime-info-content">
-              {/* Temperatura */}
-              {realtimeInfo.temperature !== null && realtimeInfo.temperature !== undefined && (
-                <div className="realtime-info-item">
-                  <div className="realtime-info-item-header">
-                    <Thermometer size={20} className="realtime-info-icon" />
-                    <span className="realtime-info-label">Temperatura Actual</span>
-                  </div>
-                  <div className="realtime-info-value">
-                    {realtimeInfo.temperature}°C
-                  </div>
-                </div>
-              )}
-              
-              {/* Tipo de cambio */}
-              {realtimeInfo.exchange_rate && (
-                <div className="realtime-info-item">
-                  <div className="realtime-info-item-header">
-                    <DollarSign size={20} className="realtime-info-icon" />
-                    <span className="realtime-info-label">Tipo de Cambio</span>
-                  </div>
-                  <div className="realtime-info-value">
-                    {realtimeInfo.exchange_rate.currency_code && (
-                      <>
-                        <div className="exchange-rate-main">
-                          1 USD = {realtimeInfo.exchange_rate.usd_to_dest} {realtimeInfo.exchange_rate.currency_code}
-                        </div>
-                        {realtimeInfo.exchange_rate.dest_to_usd && (
-                          <div className="exchange-rate-secondary">
-                            1 {realtimeInfo.exchange_rate.currency_code} = {realtimeInfo.exchange_rate.dest_to_usd} USD
+                      <div className="weather-header-divider"></div>
+                      <div className="weather-header-right">
+                        {weatherInfo.temperatura && (
+                          <div className="weather-detail-item">
+                            <Thermometer size={14} className="weather-detail-icon" />
+                            <span>{weatherInfo.temperatura}</span>
                           </div>
                         )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* Diferencia horaria */}
-              {realtimeInfo.time_difference && (
-                <div className="realtime-info-item">
-                  <div className="realtime-info-item-header">
-                    <Clock size={20} className="realtime-info-icon" />
-                    <span className="realtime-info-label">Diferencia Horaria</span>
-                  </div>
-                  <div className="realtime-info-value">
-                    <div className="time-difference-main">
-                      {realtimeInfo.time_difference.difference_string}
-                    </div>
-                    {realtimeInfo.time_difference.destination_time && (
-                      <div className="time-difference-secondary">
-                        Hora local: {realtimeInfo.time_difference.destination_time}
+                        {weatherInfo.condiciones && (
+                          <div className="weather-detail-item">
+                            <Cloud size={14} className="weather-detail-icon" />
+                            <span>{weatherInfo.condiciones}</span>
+                          </div>
+                        )}
+                        {(weatherInfo.humedad || weatherInfo.viento) && (
+                          <div className="weather-detail-row">
+                            {weatherInfo.humedad && (
+                              <div className="weather-detail-item">
+                                <Droplets size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.humedad}</span>
+                              </div>
+                            )}
+                            {weatherInfo.viento && (
+                              <div className="weather-detail-item">
+                                <Wind size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.viento}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga */}
+                {!weatherInfo && formData.destination && !loading && (
+                  <div className="header-destination-simple">
+                    <span className="destination-name">{formData.destination}</span>
+                    <button
+                      type="button"
+                      className="favorite-toggle-button"
+                      onClick={saveCurrentAsFavorite}
+                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.2s ease',
+                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                        lineHeight: 1,
+                        marginLeft: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                      }}
+                    >
+                      {isFavorite(formData.destination) ? (
+                        <Heart size={16} fill="currentColor" />
+                      ) : (
+                        <Heart size={16} />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="chat-header-center">
+              {/* Información del clima en el header - widget completo si hay weatherInfo (solo en pantallas grandes) */}
+              {weatherInfo && (
+                <div className="header-weather-info header-weather-info-desktop">
+                  <div className="weather-header-container">
+                    <div className="weather-header-left">
+                      <Cloud className="weather-main-icon" />
+                      <div className="weather-header-left-content">
+                        <div className="weather-label">Clima Actual en</div>
+                        <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {weatherInfo.city}
+                          {formData.destination && (
+                            <button
+                              type="button"
+                              className="favorite-toggle-button"
+                              onClick={saveCurrentAsFavorite}
+                              title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'color 0.2s ease',
+                                color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                lineHeight: 1
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                              }}
+                            >
+                              {isFavorite(formData.destination) ? (
+                                <Heart size={16} fill="currentColor" />
+                              ) : (
+                                <Heart size={16} />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="weather-header-divider"></div>
+                    <div className="weather-header-right">
+                      {weatherInfo.temperatura && (
+                        <div className="weather-detail-item">
+                          <Thermometer size={14} className="weather-detail-icon" />
+                          <span>{weatherInfo.temperatura}</span>
+                        </div>
+                      )}
+                      {weatherInfo.condiciones && (
+                        <div className="weather-detail-item">
+                          <Cloud size={14} className="weather-detail-icon" />
+                          <span>{weatherInfo.condiciones}</span>
+                        </div>
+                      )}
+                      {(weatherInfo.humedad || weatherInfo.viento) && (
+                        <div className="weather-detail-row">
+                          {weatherInfo.humedad && (
+                            <div className="weather-detail-item">
+                              <Droplets size={14} className="weather-detail-icon" />
+                              <span>{weatherInfo.humedad}</span>
+                            </div>
+                          )}
+                          {weatherInfo.viento && (
+                            <div className="weather-detail-item">
+                              <Wind size={14} className="weather-detail-icon" />
+                              <span>{weatherInfo.viento}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
               
-              {/* Mensaje si no hay información disponible */}
-              {!realtimeInfo.temperature && !realtimeInfo.exchange_rate && !realtimeInfo.time_difference && (
-                <div className="realtime-info-empty">
-                  <AlertCircle size={20} />
-                  <p>No hay información disponible para este destino</p>
+              {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga (solo en pantallas grandes) */}
+              {!weatherInfo && formData.destination && !loading && (
+                <div className="header-destination-simple header-destination-simple-desktop">
+                  <span className="destination-name">{formData.destination}</span>
+                  <button
+                    type="button"
+                    className="favorite-toggle-button"
+                    onClick={saveCurrentAsFavorite}
+                    title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'color 0.2s ease',
+                      color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                      lineHeight: 1,
+                      marginLeft: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                    }}
+                  >
+                    {isFavorite(formData.destination) ? (
+                      <Heart size={16} fill="currentColor" />
+                    ) : (
+                      <Heart size={16} />
+                    )}
+                  </button>
                 </div>
               )}
             </div>
+            <div className="chat-header-right">
+              <button
+                type="button"
+                className={`side-panel-toggle ${showSidePanel ? 'active' : ''}`}
+                onClick={() => setShowSidePanel(!showSidePanel)}
+                aria-label="Toggle panel lateral"
+              >
+                <ChevronRight size={20} className={showSidePanel ? 'rotated' : ''} />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Fotos fijas - debajo del header, encima del área de chat */}
+        {photos && photos.length > 0 && (
+          <div className="fixed-photos-section">
+            <div className="result-photos-grid">
+              {photos.slice(0, 3).map((photo, index) => (
+                <div key={photo.id || index} className="result-photo-item">
+                  <img
+                    src={photo.url || photo.url_small}
+                    alt={photo.description || `Foto del destino`}
+                    loading="lazy"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Contenedor principal con panel lateral */}
+        <div className="chat-main-container">
+          {/* Panel lateral colapsable */}
+          <aside className={`side-panel ${showSidePanel ? 'open' : ''}`}>
+            <div className="side-panel-content">
+              <div className="side-panel-section">
+                <h3 className="side-panel-title">Acciones Rápidas</h3>
+                <div className="quick-actions">
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={() => setShowForm(true)}
+                    disabled={showForm}
+                  >
+                    <ArrowLeft size={18} />
+                    <span>Modificar Viaje</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={() => {
+                      setShowHistory(!showHistory);
+                      if (!showHistory && sessionId) {
+                        loadConversationHistory();
+                      }
+                    }}
+                    disabled={!sessionId || !formData.destination}
+                  >
+                    <History size={18} />
+                    <span>Historial</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={handleDownloadItinerary}
+                    disabled={!sessionId || !response}
+                  >
+                    <Download size={18} />
+                    <span>Descargar PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-action-btn"
+                    onClick={() => {
+                      setShowFavorites(!showFavorites);
+                      if (!showFavorites) {
+                        loadFavorites();
+                      }
+                    }}
+                  >
+                    <Bookmark size={18} />
+                    <span>Favoritos</span>
+                  </button>
+                </div>
               </div>
+              
+              {realtimeInfo && (
+                <div className="side-panel-section">
+                  <h3 className="side-panel-title">Info en Tiempo Real</h3>
+                  <div className="realtime-info-compact">
+                    {/* Temperatura */}
+                    {realtimeInfo.temperature !== null && realtimeInfo.temperature !== undefined && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Temperatura</span>
+                        <span className="realtime-info-compact-value">{realtimeInfo.temperature}°C</span>
+                      </div>
+                    )}
+                    
+                    {/* Tipo de cambio */}
+                    {realtimeInfo.exchange_rate && typeof realtimeInfo.exchange_rate === 'object' && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Tipo de Cambio</span>
+                        <span className="realtime-info-compact-value">
+                          {realtimeInfo.exchange_rate.currency_code && (
+                            <>1 USD = {realtimeInfo.exchange_rate.usd_to_dest} {realtimeInfo.exchange_rate.currency_code}</>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Diferencia horaria */}
+                    {realtimeInfo.time_difference && typeof realtimeInfo.time_difference === 'object' && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Diferencia Horaria</span>
+                        <span className="realtime-info-compact-value">
+                          {realtimeInfo.time_difference.difference_string || `${realtimeInfo.time_difference.difference_hours}h`}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Clima */}
+                    {realtimeInfo.weather && typeof realtimeInfo.weather === 'object' && (
+                      <div className="realtime-info-compact-item">
+                        <span className="realtime-info-compact-label">Clima</span>
+                        <span className="realtime-info-compact-value">
+                          {realtimeInfo.weather.temperatura || realtimeInfo.weather.descripcion || 'N/A'}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Otros valores simples */}
+                    {Object.entries(realtimeInfo).map(([key, value]) => {
+                      // Saltar objetos complejos que ya renderizamos arriba
+                      if (key === 'exchange_rate' || key === 'time_difference' || key === 'weather' || key === 'temperature') {
+                        return null;
+                      }
+                      // Solo renderizar valores primitivos
+                      if (typeof value === 'object' && value !== null) {
+                        return null;
+                      }
+                      return (
+                        <div key={key} className="realtime-info-compact-item">
+                          <span className="realtime-info-compact-label">{key}</span>
+                          <span className="realtime-info-compact-value">{String(value)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* Área de chat principal */}
+          <main className="chat-main">
+            <div className="chat-messages" ref={chatContainerRef}>
+              {/* Mensaje de bienvenida inicial - solo si no hay mensajes en el chat y no se está cargando */}
+              {chatMessages.length === 0 && !loading && (
+                <div className="message message-assistant welcome-message">
+                  <div className="message-avatar">
+                    <Luggage size={24} />
+                  </div>
+                  <div className="message-content">
+                    <div className="message-text">
+                      <p>¡Hola! Soy Alex, tu Consultor Personal de Viajes. 👋</p>
+                      <p>Puedo ayudarte a planificar tu próximo viaje. Solo dime:</p>
+                      <ul>
+                        <li>¿A dónde quieres viajar?</li>
+                        <li>¿Cuál es tu presupuesto?</li>
+                        <li>¿Qué tipo de actividades te interesan?</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Historial de conversación - mensajes en orden secuencial */}
+              {chatMessages.map((msg, msgIndex) => {
+                if (msg.role === 'user') {
+                  return (
+                    <div key={`user-${msgIndex}`} className="message message-user">
+                      <div className="message-content">
+                        <div className="message-text">{msg.content}</div>
+                      </div>
+                      <div className="message-avatar">
+                        <User size={20} />
+                      </div>
+                    </div>
+                  );
+                } else if (msg.role === 'assistant') {
+                  // Usar la respuesta actual si es la última y está cargando, sino usar el contenido guardado
+                  const isLastResponse = msgIndex === chatMessages.length - 1 && !loading;
+                  const responseToParse = isLastResponse && response ? response : msg.content;
+                  const parsed = parseResponseSections(responseToParse);
+                  
+                  return (() => {
+                    if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
+                      const sectionKeys = Object.keys(parsed.sections);
+                      const resultId = `result-${msgIndex}`;
+                      // Obtener el índice del carrusel para este mensaje específico
+                      const messageCarouselIndex = carouselIndices[resultId] || 0;
+                      const validIndex = Math.min(messageCarouselIndex, sectionKeys.length - 1);
+                      const currentSectionKey = sectionKeys[validIndex];
+                      const currentSectionContent = parsed.sections[currentSectionKey];
+                      const hasMultipleSections = sectionKeys.length > 1;
+                      // Por defecto, los resultados están expandidos (undefined !== false = true)
+                      // Si está explícitamente en false, entonces está colapsado
+                      const isExpanded = expandedResults[resultId] !== false;
+                      
+                      // Crear o obtener el ref para el scroll de este mensaje
+                      if (!sectionScrollRefs.current[resultId]) {
+                        sectionScrollRefs.current[resultId] = React.createRef();
+                      }
+                      const sectionScrollRef = sectionScrollRefs.current[resultId];
+
+                      return (
+                        <div key={`assistant-${msgIndex}`} className="message message-assistant">
+                          <div className="message-avatar">
+                            <Luggage size={24} />
+                          </div>
+                          <div className="message-content">
+                            <div className="result-card">
+                              {/* El encabezado del clima ahora está fijo fuera del área de chat */}
+                              
+                              {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
+
+                              {/* Contenido expandible - solo para respuestas con secciones */}
+                              <div className={`result-content result-content-with-sections ${isExpanded ? 'expanded' : ''}`}>
+                                {/* Texto antes de las secciones */}
+                                {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
+                                  <div className="result-text">
+                                    {renderPlainText(parsed.beforeText)}
+                                  </div>
+                                )}
+
+                                {/* Carrusel de secciones */}
+                                <div className="result-sections">
+                                  <div className="section-card">
+                                    <div className="section-header">
+                                      <div className="section-title">
+                                        {getSectionIcon(currentSectionKey)}
+                                        <span>{currentSectionKey}</span>
+                                      </div>
+                                      {hasMultipleSections && (
+                                        <div className="section-nav">
+                                          <button
+                                            className="section-nav-btn"
+                                            onClick={() => navigateCarousel('prev', resultId, responseToParse)}
+                                            aria-label="Sección anterior"
+                                          >
+                                            <ChevronLeft size={18} />
+                                          </button>
+                                          <span className="section-indicator">
+                                            {validIndex + 1} / {sectionKeys.length}
+                                          </span>
+                                          <button
+                                            className="section-nav-btn"
+                                            onClick={() => navigateCarousel('next', resultId, responseToParse)}
+                                            aria-label="Siguiente sección"
+                                          >
+                                            <ChevronRight size={18} />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="section-content" ref={sectionScrollRef}>
+                                      {renderSectionContent(currentSectionContent, currentSectionKey)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Texto después de las secciones */}
+                                {parsed.afterText && parsed.afterText.trim().length > 0 && (
+                                  <div className="result-text">
+                                    {renderPlainText(parsed.afterText)}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Botón para expandir/colapsar */}
+                              <button
+                                type="button"
+                                className="expand-btn"
+                                onClick={() => toggleExpandResult(resultId)}
+                              >
+                                {isExpanded ? 'Ver menos' : 'Ver más'}
+                                <ChevronRight size={16} className={isExpanded ? 'rotated' : ''} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // Respuesta simple sin secciones - sin result-card para evitar doble marco
+                      return (
+                        <div key={`assistant-${msgIndex}`} className="message message-assistant">
+                          <div className="message-avatar">
+                            <Luggage size={24} />
+                          </div>
+                          <div className="message-content">
+                            <div className="message-text">
+                              {renderPlainText(msg.content)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                  })();
+                }
+                return null;
+              })}
+
+              {/* Skeleton loader mientras se carga la respuesta - se muestra cuando está cargando y hay un mensaje del usuario esperando respuesta */}
+              {loading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user' && (
+                <div className="message message-assistant">
+                  <div className="message-avatar">
+                    <Luggage size={24} />
+                  </div>
+                  <div className="message-content">
+                    <div className="skeleton-message">
+                      {/* Primer párrafo */}
+                      <div className="skeleton-paragraph">
+                        <div className="skeleton skeleton-line" style={{ width: '100%' }}></div>
+                        <div className="skeleton skeleton-line" style={{ width: '100%' }}></div>
+                        <div className="skeleton skeleton-line" style={{ width: '85%' }}></div>
+                      </div>
+                      {/* Segundo párrafo */}
+                      <div className="skeleton-paragraph">
+                        <div className="skeleton skeleton-line" style={{ width: '100%' }}></div>
+                        <div className="skeleton skeleton-line" style={{ width: '90%' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Mostrar la última respuesta si está cargando o si no hay mensajes en chatMessages pero sí hay response */}
+              {!loading && response && response.trim().length > 0 && chatMessages.length === 0 && (() => {
+                const parsed = parsedResponse;
+                
+                if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
+                  const sectionKeys = Object.keys(parsed.sections);
+                  const resultId = `result-${Date.now()}`;
+                  // Obtener el índice del carrusel para este mensaje específico
+                  const messageCarouselIndex = carouselIndices[resultId] || 0;
+                  const validIndex = Math.min(messageCarouselIndex, sectionKeys.length - 1);
+                  const currentSectionKey = sectionKeys[validIndex];
+                  const currentSectionContent = parsed.sections[currentSectionKey];
+                  const hasMultipleSections = sectionKeys.length > 1;
+                  // Por defecto, los resultados están expandidos (undefined !== false = true)
+                  // Si está explícitamente en false, entonces está colapsado
+                  const isExpanded = expandedResults[resultId] !== false;
+                  
+                  // Crear o obtener el ref para el scroll de este mensaje
+                  if (!sectionScrollRefs.current[resultId]) {
+                    sectionScrollRefs.current[resultId] = { current: null };
+                  }
+                  const sectionScrollRef = sectionScrollRefs.current[resultId];
+
+                  return (
+                    <div className="message message-assistant">
+                      <div className="message-avatar">
+                        <Luggage size={24} />
+                      </div>
+                      <div className="message-content">
+                        <div className="result-card">
+                          {/* El encabezado del clima ahora está fijo fuera del área de chat */}
+
+                          {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
+
+                          {/* Contenido expandible - solo para respuestas con secciones */}
+                          <div className={`result-content result-content-with-sections ${isExpanded ? 'expanded' : ''}`}>
+                            {/* Texto antes de las secciones */}
+                            {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
+                              <div className="result-text">
+                                {renderPlainText(parsed.beforeText)}
+                              </div>
+                            )}
+
+                            {/* Carrusel de secciones */}
+                            <div className="result-sections">
+                              <div className="section-card">
+                                <div className="section-header">
+                                  <div className="section-title">
+                                    {getSectionIcon(currentSectionKey)}
+                                    <span>{currentSectionKey}</span>
+                                  </div>
+                                  {hasMultipleSections && (
+                                    <div className="section-nav">
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('prev', resultId, response)}
+                                        aria-label="Sección anterior"
+                                      >
+                                        <ChevronLeft size={18} />
+                                      </button>
+                                      <span className="section-indicator">
+                                        {validIndex + 1} / {sectionKeys.length}
+                                      </span>
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('next', resultId, response)}
+                                        aria-label="Siguiente sección"
+                                      >
+                                        <ChevronRight size={18} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="section-content" ref={sectionScrollRef}>
+                                  {renderSectionContent(currentSectionContent, currentSectionKey)}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Texto después de las secciones */}
+                            {parsed.afterText && parsed.afterText.trim().length > 0 && (
+                              <div className="result-text">
+                                {renderPlainText(parsed.afterText)}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Botón para expandir/colapsar */}
+                          <button
+                            type="button"
+                            className="expand-btn"
+                            onClick={() => toggleExpandResult(resultId)}
+                          >
+                            {isExpanded ? 'Ver menos' : 'Ver más'}
+                            <ChevronRight size={16} className={isExpanded ? 'rotated' : ''} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                } else {
+                  // Respuesta simple sin secciones
+                  return (
+                    <div className="message message-assistant">
+                      <div className="message-avatar">
+                        <Luggage size={24} />
+                      </div>
+                      <div className="message-content">
+                        <div className="result-card">
+                          {/* Header completo con clima y favorito */}
+                          {weatherInfo && (
+                            <div className="result-card-header-weather">
+                              <div className="weather-header-container">
+                                <div className="weather-header-left">
+                                  <Cloud className="weather-main-icon" />
+                                  <div className="weather-header-left-content">
+                                    <div className="weather-label">Clima Actual en</div>
+                                    <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      {weatherInfo.city}
+                                      {formData.destination && response && (
+                                        <button
+                                          type="button"
+                                          className="favorite-toggle-button"
+                                          onClick={saveCurrentAsFavorite}
+                                          title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            padding: '2px',
+                                            borderRadius: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            transition: 'color 0.2s ease',
+                                            color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                            lineHeight: 1
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                          }}
+                                        >
+                                          {isFavorite(formData.destination) ? (
+                                            <Heart size={16} fill="currentColor" />
+                                          ) : (
+                                            <Heart size={16} />
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="weather-header-divider"></div>
+                                <div className="weather-header-right">
+                                  {weatherInfo.temperatura && (
+                                    <div className="weather-detail-item">
+                                      <Thermometer size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.temperatura}</span>
+                                    </div>
+                                  )}
+                                  {weatherInfo.condiciones && (
+                                    <div className="weather-detail-item">
+                                      <Cloud size={14} className="weather-detail-icon" />
+                                      <span>{weatherInfo.condiciones}</span>
+                                    </div>
+                                  )}
+                                  {(weatherInfo.humedad || weatherInfo.viento) && (
+                                    <div className="weather-detail-row">
+                                      {weatherInfo.humedad && (
+                                        <div className="weather-detail-item">
+                                          <Droplets size={14} className="weather-detail-icon" />
+                                          <span>{weatherInfo.humedad}</span>
+                                        </div>
+                                      )}
+                                      {weatherInfo.viento && (
+                                        <div className="weather-detail-item">
+                                          <Wind size={14} className="weather-detail-icon" />
+                                          <span>{weatherInfo.viento}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
+                          
+                          <div className="result-content">
+                            <div className="message-text">
+                              {renderPlainText(response)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+              })()}
+
+              {/* Referencia para scroll automático */}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input fijo en la parte inferior */}
+            <div className="chat-input-container">
+              <form onSubmit={handleSubmit} className="chat-input-form">
+                <div className="chat-input-wrapper">
+                  <textarea
+                    className="chat-input"
+                    placeholder="Escribe tu pregunta aquí... (Enter para enviar, Shift+Enter para nueva línea)"
+                    value={question}
+                    onChange={(e) => {
+                      // NO limpiar la respuesta cuando el usuario escribe
+                      // La información debe permanecer visible
+                      setQuestion(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (question.trim() && !loading) {
+                          handleSubmit(e);
+                        }
+                      }
+                    }}
+                    rows="1"
+                    disabled={loading}
+                  />
+                  <button
+                    type="submit"
+                    className="chat-send-btn"
+                    disabled={loading || !question.trim()}
+                    aria-label="Enviar mensaje"
+                  >
+                    {loading ? (
+                      <div className="spinner"></div>
+                    ) : (
+                      <ArrowRight size={20} />
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      {/* Contenedor de botones flotantes en la parte inferior derecha - siempre visible */}
+        <div className="floating-buttons-container">
+          {/* Botón para modificar viaje */}
+          <div className="floating-button-wrapper">
+            <button
+              type="button"
+              className="floating-button modify-trip-float-button"
+              onClick={() => setShowForm(true)}
+              disabled={showForm || !formData.destination || formData.destination.trim() === '' || loading}
+              aria-label="Modificar información del viaje"
+            >
+              <ArrowLeft size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              {showForm || !formData.destination || formData.destination.trim() === '' 
+                ? 'Completa el formulario para habilitar' 
+                : 'Modificar viaje'}
+            </div>
+          </div>
+
+          {/* Botón de historial */}
+          <div className="floating-button-wrapper">
+            {conversationHistory.length > 0 && !(!sessionId || !formData.destination || formData.destination.trim() === '') && (
+              <span 
+                className="floating-button-badge-top"
+                onClick={() => {
+                  if (sessionId && formData.destination && formData.destination.trim() !== '') {
+                    setShowHistory(!showHistory);
+                    if (!showHistory && sessionId) {
+                      loadConversationHistory();
+                    }
+                  }
+                }}
+                style={{ cursor: (!sessionId || !formData.destination || formData.destination.trim() === '') ? 'not-allowed' : 'pointer' }}
+                title="Ver historial de conversaciones"
+              >
+                {conversationHistory.length > 10 ? '+10' : conversationHistory.length}
+              </span>
             )}
+            <button
+              type="button"
+              className="floating-button history-float-button"
+              onClick={() => {
+                if (sessionId && formData.destination && formData.destination.trim() !== '' && !loading) {
+                  setShowHistory(!showHistory);
+                  if (!showHistory && sessionId) {
+                    loadConversationHistory();
+                  }
+                }
+              }}
+              disabled={!sessionId || !formData.destination || formData.destination.trim() === '' || loading}
+              aria-label="Ver historial de conversaciones"
+            >
+              <History size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              Historial de conversaciones
+              {!sessionId || !formData.destination || formData.destination.trim() === '' ? (
+                <span className="tooltip-badge">No disponible</span>
+              ) : conversationHistory.length > 0 && (
+                <span className="tooltip-badge">
+                  {conversationHistory.length} {conversationHistory.length === 1 ? 'mensaje' : 'mensajes'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Botón de descargar itinerario */}
+          <div className="floating-button-wrapper">
+            <button
+              type="button"
+              className="floating-button download-itinerary-float-button"
+              onClick={handleDownloadItinerary}
+              disabled={!sessionId || !formData.destination || formData.destination.trim() === '' || !response || response.trim() === '' || loading}
+              aria-label="Descargar itinerario en PDF"
+            >
+              <Download size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              Descargar itinerario
+              {!sessionId || !formData.destination || formData.destination.trim() === '' || !response || response.trim() === '' ? (
+                <span className="tooltip-badge">No disponible</span>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Botón de favoritos */}
+          <div className="floating-button-wrapper">
+            {favorites.length > 0 && (
+              <span 
+                className="floating-button-badge-top"
+                onClick={() => {
+                  setShowFavorites(!showFavorites);
+                  if (!showFavorites) {
+                    loadFavorites();
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+                title="Ver mis viajes guardados"
+              >
+                {favorites.length > 10 ? '+10' : favorites.length}
+              </span>
+            )}
+            <button
+              type="button"
+              className="floating-button favorites-float-button"
+              onClick={() => {
+                if (!loading) {
+                  setShowFavorites(!showFavorites);
+                  if (!showFavorites) {
+                    loadFavorites();
+                  }
+                }
+              }}
+              disabled={loading}
+              aria-label="Mis Viajes Guardados"
+            >
+              <Bookmark size={24} className="floating-button-icon" />
+              <span className="floating-button-glow"></span>
+            </button>
+            <div className="floating-tooltip">
+              Mis Viajes Guardados
+              {favorites.length > 0 && (
+                <span className="tooltip-badge">
+                  {favorites.length} {favorites.length === 1 ? 'viaje' : 'viajes'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Botón flotante para información en tiempo real */}
+          {realtimeInfo && (
+            <div 
+              className="floating-button-wrapper realtime-button-wrapper"
+              onMouseLeave={(e) => {
+                // Si el mouse sale del wrapper y no va al panel, ocultar
+                if (!e.relatedTarget || !(e.relatedTarget instanceof Element) || !e.relatedTarget.closest('.realtime-info-panel-float')) {
+                  setShowRealtimePanel(false);
+                }
+              }}
+            >
+              <button
+                type="button"
+                className="floating-button realtime-info-float-button"
+                onClick={() => setShowRealtimePanel(!showRealtimePanel)}
+                onMouseEnter={() => setShowRealtimePanel(true)}
+                aria-label="Ver información en tiempo real"
+              >
+                <Radio size={24} className="realtime-live-icon" />
+                <span className="realtime-pulse"></span>
+                <span className="floating-button-glow"></span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Panel flotante de información en tiempo real (fuera del contenedor de botones) */}
+        {realtimeInfo && showRealtimePanel && (
+          <div className="realtime-info-wrapper">
+            <div 
+              className="realtime-info-panel-float"
+              onMouseEnter={() => setShowRealtimePanel(true)}
+              onMouseLeave={(e) => {
+                // Si el mouse sale del panel y no va al botón, ocultar
+                if (!e.relatedTarget || !(e.relatedTarget instanceof Element) || !e.relatedTarget.closest('.realtime-button-wrapper')) {
+                  setShowRealtimePanel(false);
+                }
+              }}
+            >
+              <div className="realtime-info-header">
+                <h3 className="realtime-info-title">Información en Tiempo Real</h3>
+                <button
+                  type="button"
+                  className="realtime-info-close"
+                  onClick={() => setShowRealtimePanel(false)}
+                  aria-label="Cerrar panel"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+          
+              <div className="realtime-info-content">
+                {/* Temperatura */}
+                {realtimeInfo.temperature !== null && realtimeInfo.temperature !== undefined && (
+                  <div className="realtime-info-item">
+                    <div className="realtime-info-item-header">
+                      <Thermometer size={20} className="realtime-info-icon" />
+                      <span className="realtime-info-label">Temperatura Actual</span>
+                    </div>
+                    <div className="realtime-info-value">
+                      {realtimeInfo.temperature}°C
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tipo de cambio */}
+                {realtimeInfo.exchange_rate && (
+                  <div className="realtime-info-item">
+                    <div className="realtime-info-item-header">
+                      <DollarSign size={20} className="realtime-info-icon" />
+                      <span className="realtime-info-label">Tipo de Cambio</span>
+                    </div>
+                    <div className="realtime-info-value">
+                      {realtimeInfo.exchange_rate.currency_code && (
+                        <>
+                          <div className="exchange-rate-main">
+                            1 USD = {realtimeInfo.exchange_rate.usd_to_dest} {realtimeInfo.exchange_rate.currency_code}
+                          </div>
+                          {realtimeInfo.exchange_rate.dest_to_usd && (
+                            <div className="exchange-rate-secondary">
+                              1 {realtimeInfo.exchange_rate.currency_code} = {realtimeInfo.exchange_rate.dest_to_usd} USD
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Diferencia horaria */}
+                {realtimeInfo.time_difference && (
+                  <div className="realtime-info-item">
+                    <div className="realtime-info-item-header">
+                      <Clock size={20} className="realtime-info-icon" />
+                      <span className="realtime-info-label">Diferencia Horaria</span>
+                    </div>
+                    <div className="realtime-info-value">
+                      <div className="time-difference-main">
+                        {realtimeInfo.time_difference.difference_string}
+                      </div>
+                      {realtimeInfo.time_difference.destination_time && (
+                        <div className="time-difference-secondary">
+                          Hora local: {realtimeInfo.time_difference.destination_time}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Mensaje si no hay información disponible */}
+                {!realtimeInfo.temperature && !realtimeInfo.exchange_rate && !realtimeInfo.time_difference && (
+                  <div className="realtime-info-empty">
+                    <AlertCircle size={20} />
+                    <p>No hay información disponible para este destino</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Panel de historial de conversaciones */}
+        {showHistory && (
+          <div className="history-panel-overlay" onClick={() => setShowHistory(false)}>
+            <div className="history-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="history-panel-header">
+                <h3 className="history-panel-title">
+                  <History size={20} />
+                  Historial de Conversaciones
+                </h3>
+                <button
+                  type="button"
+                  className="history-panel-close"
+                  onClick={() => setShowHistory(false)}
+                  aria-label="Cerrar historial"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="history-panel-content">
+                {conversationHistory.length === 0 ? (
+                  <div className="history-empty">
+                    <MessageSquare size={48} />
+                    <p>No hay conversaciones anteriores</p>
+                    <p className="history-empty-subtitle">Las preguntas y respuestas aparecerán aquí</p>
+                  </div>
+                ) : (
+                  <div className="history-messages">
+                    {conversationHistory.map((msg, index) => {
+                      // Parsear respuesta del asistente si es JSON
+                      let displayContent = msg.content;
+                      if (msg.role === 'assistant') {
+                        const parsed = parseResponseSections(msg.content);
+                        if (parsed && parsed.sections) {
+                          // Formatear las secciones de forma legible
+                          const sections = Object.entries(parsed.sections).map(([name, content]) => {
+                            const lines = content.split('\n').filter(line => line.trim());
+                            return `**${name}:**\n${lines.map(line => `• ${line}`).join('\n')}`;
+                          }).join('\n\n');
+                          
+                          displayContent = sections;
+                          if (parsed.beforeText) {
+                            displayContent = parsed.beforeText + '\n\n' + displayContent;
+                          }
+                          if (parsed.afterText) {
+                            displayContent = displayContent + '\n\n' + parsed.afterText;
+                          }
+                        }
+                      }
+                      
+                      return (
+                        <div key={index} className={`history-message history-message-${msg.role}`}>
+                          <div className="history-message-header">
+                            <span className="history-message-role">
+                              {msg.role === 'user' ? '👤 Tú' : '🤖 Alex'}
+                            </span>
+                            {msg.timestamp && (
+                              <span className="history-message-time">
+                                {new Date(msg.timestamp).toLocaleTimeString('es-ES', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </span>
+                            )}
+                          </div>
+                          <div className="history-message-content">
+                            {displayContent.split('\n').map((line, lineIndex) => {
+                              const trimmedLine = line.trim();
+                              
+                              // Procesar markdown básico para títulos de sección
+                              if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
+                                return (
+                                  <div key={lineIndex} style={{ 
+                                    fontWeight: '600', 
+                                    fontSize: '1rem', 
+                                    marginTop: lineIndex > 0 ? '16px' : '0',
+                                    marginBottom: '8px',
+                                    color: '#1e293b'
+                                  }}>
+                                    {trimmedLine.slice(2, -2)}
+                                  </div>
+                                );
+                              }
+                              // Procesar viñetas
+                              if (trimmedLine.startsWith('•')) {
+                                return (
+                                  <div key={lineIndex} style={{ 
+                                    marginLeft: '16px', 
+                                    marginTop: '6px',
+                                    marginBottom: '4px',
+                                    lineHeight: '1.6'
+                                  }}>
+                                    {trimmedLine}
+                                  </div>
+                                );
+                              }
+                              // Líneas vacías
+                              if (trimmedLine === '') {
+                                return <br key={lineIndex} />;
+                              }
+                              // Línea normal
+                              return (
+                                <div key={lineIndex} style={{ 
+                                  marginTop: lineIndex > 0 ? '8px' : '0',
+                                  lineHeight: '1.6'
+                                }}>
+                                  {trimmedLine}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {conversationHistory.length > 0 && (
+                <div className="history-panel-footer">
+                  <button
+                    type="button"
+                    className="history-clear-button"
+                    onClick={async () => {
+                      if (sessionId && window.confirm('¿Estás seguro de que quieres limpiar el historial?')) {
+                        try {
+                          await axios.post(`${API_URL}/api/conversation/clear`, {
+                            session_id: sessionId
+                          });
+                          setConversationHistory([]);
+                          setShowHistory(false);
+                        } catch (error) {
+                          console.error('Error al limpiar historial:', error);
+                        }
+                      }
+                    }}
+                  >
+                    Limpiar historial
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Panel de favoritos - Mis Viajes Guardados */}
+        {showFavorites && (
+          <div className="favorites-panel-overlay" onClick={() => setShowFavorites(false)}>
+            <div className="favorites-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="favorites-panel-header">
+                <h3 className="favorites-panel-title">
+                  <Bookmark size={20} />
+                  Mis Viajes Guardados
+                </h3>
+                <button
+                  type="button"
+                  className="favorites-panel-close"
+                  onClick={() => setShowFavorites(false)}
+                  aria-label="Cerrar favoritos"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="favorites-panel-content">
+                {favorites.length === 0 ? (
+                  <div className="favorites-empty">
+                    <Bookmark size={48} />
+                    <p>No hay viajes guardados</p>
+                    <p className="favorites-empty-subtitle">Los destinos que consultes se guardarán automáticamente aquí</p>
+                  </div>
+                ) : (
+                  <div className="favorites-list">
+                    {favorites.map((favorite) => (
+                      <div key={favorite.id} className="favorite-item">
+                        <div className="favorite-item-header">
+                          <div className="favorite-item-destination">
+                            <MapPin size={18} className="favorite-item-icon" />
+                            <div className="favorite-item-info">
+                              <h4 className="favorite-item-title">{favorite.destination}</h4>
+                              {(favorite.departureDate || favorite.returnDate) && (
+                                <div className="favorite-item-dates">
+                                  {favorite.departureDate && (
+                                    <span className="favorite-date">
+                                      <Calendar size={14} />
+                                      Salida: {new Date(favorite.departureDate).toLocaleDateString('es-ES', { 
+                                        day: 'numeric', 
+                                        month: 'short', 
+                                        year: 'numeric' 
+                                      })}
+                                    </span>
+                                  )}
+                                  {favorite.returnDate && (
+                                    <span className="favorite-date">
+                                      <Calendar size={14} />
+                                      Regreso: {new Date(favorite.returnDate).toLocaleDateString('es-ES', { 
+                                        day: 'numeric', 
+                                        month: 'short', 
+                                        year: 'numeric' 
+                                      })}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <div className="favorite-item-saved">
+                                Guardado el {new Date(favorite.savedAt).toLocaleDateString('es-ES', { 
+                                  day: 'numeric', 
+                                  month: 'long', 
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="favorite-item-actions">
+                          <button
+                            type="button"
+                            className="favorite-action-button favorite-load-button"
+                            onClick={() => loadFavoriteToForm(favorite)}
+                            title="Cargar en formulario"
+                          >
+                            <ArrowLeft size={16} />
+                            Cargar
+                          </button>
+                          <button
+                            type="button"
+                            className="favorite-action-button favorite-download-button"
+                            onClick={() => downloadFavoritePDF(favorite)}
+                            title="Descargar PDF"
+                          >
+                            <Download size={16} />
+                            PDF
+                          </button>
+                          <button
+                            type="button"
+                            className="favorite-action-button favorite-delete-button"
+                            onClick={() => handleDeleteFavorite(favorite)}
+                            title="Eliminar favorito"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {favorites.length > 0 && (
+                <div className="favorites-panel-footer">
+                  <button
+                    type="button"
+                    className="favorites-clear-button"
+                    onClick={handleDeleteAllFavorites}
+                  >
+                    Eliminar todos
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmación para eliminar favoritos */}
+        {showDeleteModal && (
+          <div className="delete-modal-overlay" onClick={cancelDeleteFavorite}>
+            <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="delete-modal-header">
+                <AlertCircle size={24} className="delete-modal-icon" />
+                <h3 className="delete-modal-title">Confirmar eliminación</h3>
+              </div>
+              <div className="delete-modal-content">
+                <p>
+                  {deleteAllFavorites
+                    ? '¿Estás seguro de que quieres eliminar todos tus favoritos? Esta acción no se puede deshacer.'
+                    : `¿Estás seguro de que quieres eliminar "${favoriteToDelete?.destination}" de tus favoritos?`}
+                </p>
+              </div>
+              <div className="delete-modal-actions">
+                <button
+                  type="button"
+                  className="delete-modal-cancel"
+                  onClick={cancelDeleteFavorite}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="delete-modal-confirm"
+                  onClick={confirmDeleteFavorite}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
