@@ -84,6 +84,7 @@ function App() {
   const [carouselIndices, setCarouselIndices] = useState({}); // Índices por mensaje: { 'result-0': 0, 'result-1': 2, ... }
   const [carouselDirection, setCarouselDirection] = useState('right');
   const contentScrollRef = useRef(null);
+  const sectionScrollRefs = useRef({}); // Refs para cada sección de cada mensaje
   const lastFormDataRef = useRef(null);
   const lastTripTypeRef = useRef(null);
   const [isPending, startTransition] = useTransition();
@@ -1782,6 +1783,15 @@ function App() {
         } else {
           newIndex = (currentIndex - 1 + sectionKeys.length) % sectionKeys.length;
         }
+        
+        // Hacer scroll al inicio cuando se cambia de página
+        setTimeout(() => {
+          const scrollRef = sectionScrollRefs.current[resultId];
+          if (scrollRef && scrollRef.current) {
+            scrollRef.current.scrollTop = 0;
+          }
+        }, 0);
+        
         return {
           ...prevIndices,
           [resultId]: newIndex
@@ -3059,6 +3069,12 @@ function App() {
                       // Por defecto, los resultados están expandidos (undefined !== false = true)
                       // Si está explícitamente en false, entonces está colapsado
                       const isExpanded = expandedResults[resultId] !== false;
+                      
+                      // Crear o obtener el ref para el scroll de este mensaje
+                      if (!sectionScrollRefs.current[resultId]) {
+                        sectionScrollRefs.current[resultId] = React.createRef();
+                      }
+                      const sectionScrollRef = sectionScrollRefs.current[resultId];
 
                       return (
                         <div key={`assistant-${msgIndex}`} className="message message-assistant">
@@ -3110,7 +3126,7 @@ function App() {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="section-content" ref={contentScrollRef}>
+                                    <div className="section-content" ref={sectionScrollRef}>
                                       {renderSectionContent(currentSectionContent, currentSectionKey)}
                                     </div>
                                   </div>
@@ -3138,23 +3154,15 @@ function App() {
                         </div>
                       );
                     } else {
-                      // Respuesta simple sin secciones
+                      // Respuesta simple sin secciones - sin result-card para evitar doble marco
                       return (
                         <div key={`assistant-${msgIndex}`} className="message message-assistant">
                           <div className="message-avatar">
                             <Luggage size={24} />
                           </div>
                           <div className="message-content">
-                            <div className="result-card">
-                              {/* El encabezado del clima ahora está fijo fuera del área de chat */}
-                              
-                              {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
-                              
-                              <div className="result-content">
-                                <div className="message-text">
-                                  {renderPlainText(msg.content)}
-                                </div>
-                              </div>
+                            <div className="message-text">
+                              {renderPlainText(msg.content)}
                             </div>
                           </div>
                         </div>
@@ -3165,7 +3173,7 @@ function App() {
                 return null;
               })}
 
-              {/* Skeleton loader mientras se carga la respuesta - solo si hay mensajes del usuario esperando respuesta */}
+              {/* Skeleton loader mientras se carga la respuesta - se muestra cuando está cargando y hay un mensaje del usuario esperando respuesta */}
               {loading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user' && (
                 <div className="message message-assistant">
                   <div className="message-avatar">
@@ -3173,9 +3181,17 @@ function App() {
                   </div>
                   <div className="message-content">
                     <div className="skeleton-message">
-                      <div className="skeleton skeleton-line" style={{ width: '80%' }}></div>
-                      <div className="skeleton skeleton-line" style={{ width: '60%' }}></div>
-                      <div className="skeleton skeleton-line" style={{ width: '90%' }}></div>
+                      {/* Primer párrafo */}
+                      <div className="skeleton-paragraph">
+                        <div className="skeleton skeleton-line" style={{ width: '100%' }}></div>
+                        <div className="skeleton skeleton-line" style={{ width: '100%' }}></div>
+                        <div className="skeleton skeleton-line" style={{ width: '85%' }}></div>
+                      </div>
+                      {/* Segundo párrafo */}
+                      <div className="skeleton-paragraph">
+                        <div className="skeleton skeleton-line" style={{ width: '100%' }}></div>
+                        <div className="skeleton skeleton-line" style={{ width: '90%' }}></div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3197,6 +3213,12 @@ function App() {
                   // Por defecto, los resultados están expandidos (undefined !== false = true)
                   // Si está explícitamente en false, entonces está colapsado
                   const isExpanded = expandedResults[resultId] !== false;
+                  
+                  // Crear o obtener el ref para el scroll de este mensaje
+                  if (!sectionScrollRefs.current[resultId]) {
+                    sectionScrollRefs.current[resultId] = { current: null };
+                  }
+                  const sectionScrollRef = sectionScrollRefs.current[resultId];
 
                   return (
                     <div className="message message-assistant">
@@ -3248,7 +3270,7 @@ function App() {
                                     </div>
                                   )}
                                 </div>
-                                <div className="section-content" ref={contentScrollRef}>
+                                <div className="section-content" ref={sectionScrollRef}>
                                   {renderSectionContent(currentSectionContent, currentSectionKey)}
                                 </div>
                               </div>
