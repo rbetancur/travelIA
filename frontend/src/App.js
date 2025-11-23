@@ -2127,22 +2127,7 @@ function App() {
             </p>
           </div>
           <div className="header-right">
-            <button
-              type="button"
-              onClick={() => {
-                setShowHistory(!showHistory);
-                if (!showHistory && sessionId) {
-                  loadConversationHistory();
-                }
-              }}
-              className="history-button"
-              title="Ver historial de conversaciones"
-            >
-              <History size={20} />
-              {conversationHistory.length > 0 && (
-                <span className="history-badge">{conversationHistory.length}</span>
-              )}
-            </button>
+            {/* El botón de historial ahora está en el contenedor flotante */}
           </div>
         </header>
 
@@ -2512,108 +2497,183 @@ function App() {
         </main>
         </div>
         
-        {/* Botón flotante para información en tiempo real */}
-        {realtimeInfo && !showForm && (
-          <div className="realtime-info-wrapper">
-            <button
-              type="button"
-              className="realtime-info-float-button"
-              onClick={() => setShowRealtimePanel(!showRealtimePanel)}
-              onMouseEnter={() => setShowRealtimePanel(true)}
-              aria-label="Ver información en tiempo real"
-              title="Información en tiempo real"
-            >
-              <Radio size={24} className="realtime-live-icon" />
-              <span className="realtime-pulse"></span>
-            </button>
-            
-            {/* Panel flotante de información en tiempo real */}
-            {showRealtimePanel && (
-              <div 
-                className="realtime-info-panel-float"
-                onMouseEnter={() => setShowRealtimePanel(true)}
-                onMouseLeave={() => setShowRealtimePanel(false)}
+        {/* Contenedor de botones flotantes en la parte inferior derecha */}
+        {!showForm && (
+          <div className="floating-buttons-container">
+            {/* Botón para modificar viaje */}
+            <div className="floating-button-wrapper">
+              <button
+                type="button"
+                className="floating-button modify-trip-float-button"
+                onClick={() => setShowForm(true)}
+                aria-label="Modificar información del viaje"
               >
-                <div className="realtime-info-header">
-                  <h3 className="realtime-info-title">Información en Tiempo Real</h3>
-                  <button
-                    type="button"
-                    className="realtime-info-close"
-                    onClick={() => setShowRealtimePanel(false)}
-                    aria-label="Cerrar panel"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-            
-            <div className="realtime-info-content">
-              {/* Temperatura */}
-              {realtimeInfo.temperature !== null && realtimeInfo.temperature !== undefined && (
-                <div className="realtime-info-item">
-                  <div className="realtime-info-item-header">
-                    <Thermometer size={20} className="realtime-info-icon" />
-                    <span className="realtime-info-label">Temperatura Actual</span>
-                  </div>
-                  <div className="realtime-info-value">
-                    {realtimeInfo.temperature}°C
-                  </div>
-                </div>
-              )}
-              
-              {/* Tipo de cambio */}
-              {realtimeInfo.exchange_rate && (
-                <div className="realtime-info-item">
-                  <div className="realtime-info-item-header">
-                    <DollarSign size={20} className="realtime-info-icon" />
-                    <span className="realtime-info-label">Tipo de Cambio</span>
-                  </div>
-                  <div className="realtime-info-value">
-                    {realtimeInfo.exchange_rate.currency_code && (
-                      <>
-                        <div className="exchange-rate-main">
-                          1 USD = {realtimeInfo.exchange_rate.usd_to_dest} {realtimeInfo.exchange_rate.currency_code}
-                        </div>
-                        {realtimeInfo.exchange_rate.dest_to_usd && (
-                          <div className="exchange-rate-secondary">
-                            1 {realtimeInfo.exchange_rate.currency_code} = {realtimeInfo.exchange_rate.dest_to_usd} USD
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* Diferencia horaria */}
-              {realtimeInfo.time_difference && (
-                <div className="realtime-info-item">
-                  <div className="realtime-info-item-header">
-                    <Clock size={20} className="realtime-info-icon" />
-                    <span className="realtime-info-label">Diferencia Horaria</span>
-                  </div>
-                  <div className="realtime-info-value">
-                    <div className="time-difference-main">
-                      {realtimeInfo.time_difference.difference_string}
-                    </div>
-                    {realtimeInfo.time_difference.destination_time && (
-                      <div className="time-difference-secondary">
-                        Hora local: {realtimeInfo.time_difference.destination_time}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* Mensaje si no hay información disponible */}
-              {!realtimeInfo.temperature && !realtimeInfo.exchange_rate && !realtimeInfo.time_difference && (
-                <div className="realtime-info-empty">
-                  <AlertCircle size={20} />
-                  <p>No hay información disponible para este destino</p>
-                </div>
-              )}
+                <ArrowLeft size={24} className="floating-button-icon" />
+                <span className="floating-button-glow"></span>
+              </button>
+              <div className="floating-tooltip">Modificar viaje</div>
             </div>
+
+            {/* Botón de historial */}
+            <div className="floating-button-wrapper">
+              {conversationHistory.length > 0 && (
+                <span 
+                  className="floating-button-badge-top"
+                  onClick={() => {
+                    setShowHistory(!showHistory);
+                    if (!showHistory && sessionId) {
+                      loadConversationHistory();
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
+                  title="Ver historial de conversaciones"
+                >
+                  {conversationHistory.length > 10 ? '+10' : conversationHistory.length}
+                </span>
+              )}
+              <button
+                type="button"
+                className="floating-button history-float-button"
+                onClick={() => {
+                  setShowHistory(!showHistory);
+                  if (!showHistory && sessionId) {
+                    loadConversationHistory();
+                  }
+                }}
+                aria-label="Ver historial de conversaciones"
+              >
+                <History size={24} className="floating-button-icon" />
+                <span className="floating-button-glow"></span>
+              </button>
+              <div className="floating-tooltip">
+                Historial de conversaciones
+                {conversationHistory.length > 0 && (
+                  <span className="tooltip-badge">
+                    {conversationHistory.length} {conversationHistory.length === 1 ? 'mensaje' : 'mensajes'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Botón flotante para información en tiempo real */}
+            {realtimeInfo && (
+              <div 
+                className="floating-button-wrapper realtime-button-wrapper"
+                onMouseLeave={(e) => {
+                  // Si el mouse sale del wrapper y no va al panel, ocultar
+                  if (!e.relatedTarget || !e.relatedTarget.closest('.realtime-info-panel-float')) {
+                    setShowRealtimePanel(false);
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  className="floating-button realtime-info-float-button"
+                  onClick={() => setShowRealtimePanel(!showRealtimePanel)}
+                  onMouseEnter={() => setShowRealtimePanel(true)}
+                  aria-label="Ver información en tiempo real"
+                >
+                  <Radio size={24} className="realtime-live-icon" />
+                  <span className="realtime-pulse"></span>
+                  <span className="floating-button-glow"></span>
+                </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Panel flotante de información en tiempo real (fuera del contenedor de botones) */}
+        {realtimeInfo && showRealtimePanel && (
+          <div className="realtime-info-wrapper">
+            <div 
+              className="realtime-info-panel-float"
+              onMouseEnter={() => setShowRealtimePanel(true)}
+              onMouseLeave={(e) => {
+                // Si el mouse sale del panel y no va al botón, ocultar
+                if (!e.relatedTarget || !e.relatedTarget.closest('.realtime-button-wrapper')) {
+                  setShowRealtimePanel(false);
+                }
+              }}
+            >
+              <div className="realtime-info-header">
+                <h3 className="realtime-info-title">Información en Tiempo Real</h3>
+                <button
+                  type="button"
+                  className="realtime-info-close"
+                  onClick={() => setShowRealtimePanel(false)}
+                  aria-label="Cerrar panel"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+          
+              <div className="realtime-info-content">
+                {/* Temperatura */}
+                {realtimeInfo.temperature !== null && realtimeInfo.temperature !== undefined && (
+                  <div className="realtime-info-item">
+                    <div className="realtime-info-item-header">
+                      <Thermometer size={20} className="realtime-info-icon" />
+                      <span className="realtime-info-label">Temperatura Actual</span>
+                    </div>
+                    <div className="realtime-info-value">
+                      {realtimeInfo.temperature}°C
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tipo de cambio */}
+                {realtimeInfo.exchange_rate && (
+                  <div className="realtime-info-item">
+                    <div className="realtime-info-item-header">
+                      <DollarSign size={20} className="realtime-info-icon" />
+                      <span className="realtime-info-label">Tipo de Cambio</span>
+                    </div>
+                    <div className="realtime-info-value">
+                      {realtimeInfo.exchange_rate.currency_code && (
+                        <>
+                          <div className="exchange-rate-main">
+                            1 USD = {realtimeInfo.exchange_rate.usd_to_dest} {realtimeInfo.exchange_rate.currency_code}
+                          </div>
+                          {realtimeInfo.exchange_rate.dest_to_usd && (
+                            <div className="exchange-rate-secondary">
+                              1 {realtimeInfo.exchange_rate.currency_code} = {realtimeInfo.exchange_rate.dest_to_usd} USD
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Diferencia horaria */}
+                {realtimeInfo.time_difference && (
+                  <div className="realtime-info-item">
+                    <div className="realtime-info-item-header">
+                      <Clock size={20} className="realtime-info-icon" />
+                      <span className="realtime-info-label">Diferencia Horaria</span>
+                    </div>
+                    <div className="realtime-info-value">
+                      <div className="time-difference-main">
+                        {realtimeInfo.time_difference.difference_string}
+                      </div>
+                      {realtimeInfo.time_difference.destination_time && (
+                        <div className="time-difference-secondary">
+                          Hora local: {realtimeInfo.time_difference.destination_time}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Mensaje si no hay información disponible */}
+                {!realtimeInfo.temperature && !realtimeInfo.exchange_rate && !realtimeInfo.time_difference && (
+                  <div className="realtime-info-empty">
+                    <AlertCircle size={20} />
+                    <p>No hay información disponible para este destino</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
         
