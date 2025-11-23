@@ -220,3 +220,96 @@ def detect_destination_change(
         
         return (True, detected, is_explicit)
 
+
+def interpret_confirmation_response(
+    question: str,
+    detected_destination: str,
+    current_destination: str
+) -> Tuple[bool, Optional[bool]]:
+    """
+    Interpreta si una pregunta del usuario es una respuesta a una confirmación pendiente
+    y determina si confirma o rechaza el cambio de destino.
+    
+    Args:
+        question: Pregunta del usuario
+        detected_destination: Destino detectado que se está confirmando
+        current_destination: Destino actual de la conversación
+        
+    Returns:
+        Tuple[is_confirmation_response: bool, confirmed: Optional[bool]]
+        - is_confirmation_response: True si la pregunta parece ser una respuesta a confirmación
+        - confirmed: True si confirma, False si rechaza, None si es ambigua
+    """
+    if not question or not detected_destination or not current_destination:
+        return (False, None)
+    
+    question_lower = question.lower().strip()
+    detected_lower = normalize_destination(detected_destination)
+    current_lower = normalize_destination(current_destination)
+    
+    # Extraer ciudad del destino detectado y actual para búsqueda
+    detected_city = detected_lower.split(',')[0].strip()
+    current_city = current_lower.split(',')[0].strip()
+    
+    # Palabras clave afirmativas
+    affirmative_keywords = [
+        'sí', 'si', 'yes', 'quiero', 'quiero ir', 'mejor', 'correcto', 'exacto',
+        'claro', 'perfecto', 'de acuerdo', 'ok', 'okay', 'vale', 'bueno',
+        'adelante', 'procede', 'continúa', 'cambiar', 'cambio', 'cambiar a',
+        'prefiero', 'me gustaría', 'deseo', 'anhelo'
+    ]
+    
+    # Palabras clave negativas
+    negative_keywords = [
+        'no', 'nope', 'disculpa', 'disculpe', 'perdón', 'perdone',
+        'me equivoqué', 'me equivoque', 'me confundí', 'me confundi',
+        'cancelar', 'continuar con', 'seguir con', 'mantener', 'quedarse con',
+        'mejor no', 'no quiero', 'no deseo', 'no prefiero', 'no cambio',
+        'estaba pensando', 'pensaba en', 'otra cosa', 'diferente'
+    ]
+    
+    # Verificar si menciona alguno de los destinos
+    mentions_detected = detected_city in question_lower or detected_lower in question_lower
+    mentions_current = current_city in question_lower or current_lower in question_lower
+    
+    # Buscar palabras clave afirmativas
+    has_affirmative = any(keyword in question_lower for keyword in affirmative_keywords)
+    has_negative = any(keyword in question_lower for keyword in negative_keywords)
+    
+    # Determinar si es respuesta a confirmación
+    is_confirmation_response = (
+        has_affirmative or has_negative or 
+        mentions_detected or mentions_current
+    ) and len(question_lower.split()) <= 15  # Respuestas cortas típicamente
+    
+    if not is_confirmation_response:
+        return (False, None)
+    
+    # Interpretar intención
+    # Si menciona el destino detectado y tiene palabras afirmativas → confirma
+    if mentions_detected and has_affirmative:
+        return (True, True)
+    
+    # Si menciona el destino detectado y tiene palabras negativas → rechaza
+    if mentions_detected and has_negative:
+        return (True, False)
+    
+    # Si menciona el destino actual y tiene palabras afirmativas → rechaza (quiere mantener)
+    if mentions_current and has_affirmative:
+        return (True, False)
+    
+    # Si tiene palabras afirmativas sin mencionar destino específico → confirma
+    if has_affirmative and not mentions_current:
+        return (True, True)
+    
+    # Si tiene palabras negativas → rechaza
+    if has_negative:
+        return (True, False)
+    
+    # Si solo menciona destinos sin palabras clave claras → ambigua
+    if mentions_detected or mentions_current:
+        return (True, None)
+    
+    # Por defecto, si tiene palabras clave pero no es claro → ambigua
+    return (True, None)
+

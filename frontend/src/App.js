@@ -1493,85 +1493,14 @@ function App() {
       });
 
       // ============================================================
-      // Manejar confirmación de cambio de destino
+      // Confirmación interactiva: El mensaje de confirmación se muestra en el chat
+      // El usuario responderá en el siguiente mensaje y el backend lo procesará automáticamente
       // ============================================================
-      if (result.data.requires_confirmation) {
-        console.log('❓ [CHAT] Se requiere confirmación de cambio de destino');
+      if (result.data.response_format === "confirmation") {
+        console.log('❓ [CHAT] Mensaje de confirmación recibido (se mostrará en el chat)');
         console.log('📍 [CHAT] Destino detectado:', result.data.detected_destination);
         console.log('📍 [CHAT] Destino actual:', result.data.current_destination);
-        
-        // Mostrar diálogo de confirmación
-        const userConfirmed = window.confirm(
-          result.data.answer + 
-          "\n\n¿Deseas cambiar el destino a " + result.data.detected_destination + "?"
-        );
-        
-        if (userConfirmed) {
-          console.log('✅ [CHAT] Usuario confirmó cambio de destino');
-          
-          // Confirmar cambio
-          try {
-            const confirmResult = await axios.post(`${API_URL}/api/travel/confirm-destination`, {
-              session_id: sessionId || result.data.session_id,
-              new_destination: result.data.detected_destination,
-              confirmed: true,
-              original_question: currentQuestion
-            });
-            
-            console.log('✅ [CHAT] Confirmación enviada, procesando respuesta');
-            
-            // Si la confirmación retorna una TravelResponse (con answer), procesarla
-            if (confirmResult.data.answer) {
-              // Actualizar session_id si se devolvió uno nuevo
-              if (confirmResult.data.session_id) {
-                setSessionId(confirmResult.data.session_id);
-                localStorage.setItem('viajeia_session_id', confirmResult.data.session_id);
-              }
-              
-              setResponse(confirmResult.data.answer);
-              setPhotos(confirmResult.data.photos || null);
-              
-              if (confirmResult.data.weather) {
-                setWeather(confirmResult.data.weather);
-              }
-              
-              // Actualizar historial
-              if (sessionId || confirmResult.data.session_id) {
-                loadConversationHistory();
-              }
-            } else {
-              // Si solo retorna un mensaje de confirmación
-              setResponse(confirmResult.data.message || 'Destino cambiado exitosamente. Puedes hacer tu pregunta ahora.');
-            }
-            
-            // Limpiar el input
-            setQuestion('');
-          } catch (confirmError) {
-            console.error('❌ [CHAT] Error al confirmar cambio de destino:', confirmError);
-            setResponse('Error al confirmar el cambio de destino. Por favor, intenta de nuevo.');
-          }
-        } else {
-          console.log('❌ [CHAT] Usuario rechazó cambio de destino');
-          
-          // Rechazar cambio
-          try {
-            await axios.post(`${API_URL}/api/travel/confirm-destination`, {
-              session_id: sessionId || result.data.session_id,
-              new_destination: result.data.detected_destination,
-              confirmed: false,
-              original_question: null
-            });
-            
-            setResponse('Se mantiene el destino actual: ' + result.data.current_destination + '. Puedes continuar con tu pregunta.');
-            // NO limpiar el input para que el usuario pueda reformular
-          } catch (rejectError) {
-            console.error('❌ [CHAT] Error al rechazar cambio de destino:', rejectError);
-            setResponse('Error al procesar la respuesta. Por favor, intenta de nuevo.');
-          }
-        }
-        
-        setLoading(false);
-        return; // Salir temprano, ya procesamos la confirmación
+        // El mensaje se mostrará normalmente en el chat, no se requiere acción especial
       }
 
       // Actualizar session_id si se devolvió uno nuevo

@@ -44,6 +44,7 @@ class ConversationHistory:
         """
         self.conversations: Dict[str, List[ConversationMessage]] = {}
         self.current_destinations: Dict[str, str] = {}  # Rastrea el destino actual por sesión
+        self.pending_confirmations: Dict[str, Dict] = {}  # Rastrea confirmaciones pendientes por sesión
         self.max_messages = max_messages
     
     def create_session(self) -> str:
@@ -230,6 +231,48 @@ class ConversationHistory:
         if session_id in self.current_destinations:
             del self.current_destinations[session_id]
             print(f"🧹 [HISTORY] Destino actual limpiado para sesión {session_id}")
+    
+    def set_pending_confirmation(self, session_id: str, detected_destination: str, current_destination: str, original_question: str) -> None:
+        """
+        Establece una confirmación pendiente para una sesión
+        
+        Args:
+            session_id: ID de la sesión
+            detected_destination: Destino detectado en la pregunta
+            current_destination: Destino actual de la conversación
+            original_question: Pregunta original que generó la confirmación
+        """
+        from datetime import datetime
+        self.pending_confirmations[session_id] = {
+            'detected_destination': detected_destination,
+            'current_destination': current_destination,
+            'original_question': original_question,
+            'timestamp': datetime.now()
+        }
+        print(f"⏳ [HISTORY] Confirmación pendiente establecida para sesión {session_id}: {detected_destination}")
+    
+    def get_pending_confirmation(self, session_id: str) -> Optional[Dict]:
+        """
+        Obtiene la confirmación pendiente de una sesión
+        
+        Args:
+            session_id: ID de la sesión
+        
+        Returns:
+            Diccionario con información de la confirmación pendiente o None
+        """
+        return self.pending_confirmations.get(session_id)
+    
+    def clear_pending_confirmation(self, session_id: str) -> None:
+        """
+        Limpia la confirmación pendiente de una sesión
+        
+        Args:
+            session_id: ID de la sesión
+        """
+        if session_id in self.pending_confirmations:
+            del self.pending_confirmations[session_id]
+            print(f"🧹 [HISTORY] Confirmación pendiente limpiada para sesión {session_id}")
 
 
 # Instancia global del historial de conversaciones

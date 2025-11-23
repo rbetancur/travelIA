@@ -9,7 +9,7 @@ from weather import WeatherService, extract_destination_from_question, parse_for
 from unsplash import UnsplashService
 from realtime_info import RealtimeInfoService
 from conversation_history import conversation_history
-from destination_detector import detect_destination_change
+from destination_detector import detect_destination_change, interpret_confirmation_response
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -211,16 +211,98 @@ async def plan_travel(query: TravelQuery):
             print(f"✅ [API] Usando sesión existente: {session_id}")
         
         # ============================================================
+        # PASO 1.5: Verificar si hay confirmación pendiente y procesar respuesta
+        # ============================================================
+        pending_confirmation = conversation_history.get_pending_confirmation(session_id)
+        skip_destination_detection = False
+        
+        if pending_confirmation:
+            print(f"⏳ [API] Confirmación pendiente detectada")
+            print(f"📍 [API] Destino detectado: {pending_confirmation['detected_destination']}")
+            print(f"📍 [API] Destino actual: {pending_confirmation['current_destination']}")
+            
+            # Intentar interpretar la pregunta como respuesta a la confirmación
+            is_response, confirmed = interpret_confirmation_response(
+                query.question,
+                pending_confirmation['detected_destination'],
+                pending_confirmation['current_destination']
+            )
+            
+            if is_response:
+                print(f"✅ [API] Pregunta interpretada como respuesta a confirmación: confirmed={confirmed}")
+                
+                # Añadir pregunta del usuario al historial
+                conversation_history.add_message(session_id, 'user', query.question)
+                
+                if confirmed is True:
+                    # Usuario confirmó el cambio
+                    print(f"✅ [API] Usuario confirmó cambio de destino")
+                    conversation_history.set_current_destination(session_id, pending_confirmation['detected_destination'])
+                    conversation_history.clear_pending_confirmation(session_id)
+                    
+                    # Procesar pregunta original con el nuevo destino
+                    original_question = pending_confirmation['original_question']
+                    print(f"📝 [API] Procesando pregunta original: {original_question}")
+                    
+                    # Establecer destino y continuar con lógica normal
+                    current_destination = pending_confirmation['detected_destination']
+                    destination_string = pending_confirmation['detected_destination']
+                    use_structured_format = True
+                    skip_destination_detection = True
+                    # Cambiar la pregunta a la original para procesarla
+                    # Pero primero añadir la pregunta original al historial si no está
+                    # (la respuesta de confirmación ya se añadió arriba)
+                    query.question = original_question
+                    # No añadir de nuevo al historial, ya se añadió cuando se detectó el cambio
+                    
+                elif confirmed is False:
+                    # Usuario rechazó el cambio
+                    print(f"❌ [API] Usuario rechazó cambio de destino")
+                    conversation_history.clear_pending_confirmation(session_id)
+                    current_destination = pending_confirmation['current_destination']
+                    # Continuar con pregunta actual normalmente
+                    skip_destination_detection = False
+                    
+                else:
+                    # Respuesta ambigua - pedir aclaración
+                    print(f"❓ [API] Respuesta ambigua, solicitando aclaración")
+                    clarification_message = (
+                        f"No estoy seguro de tu respuesta. "
+                        f"¿Quieres cambiar el destino a '{pending_confirmation['detected_destination']}' "
+                        f"o prefieres continuar con '{pending_confirmation['current_destination']}'? "
+                        f"Por favor responde 'sí' o 'no', o menciona el destino que prefieres."
+                    )
+                    conversation_history.add_message(session_id, 'assistant', clarification_message)
+                    return TravelResponse(
+                        answer=clarification_message,
+                        session_id=session_id,
+                        weather=None,
+                        photos=None,
+                        requires_confirmation=False,
+                        detected_destination=None,
+                        current_destination=pending_confirmation['current_destination'],
+                        response_format="confirmation"
+                    )
+            else:
+                # No es respuesta a confirmación - limpiar confirmación pendiente y continuar normalmente
+                print(f"🔄 [API] Pregunta no es respuesta a confirmación, limpiando confirmación pendiente")
+                conversation_history.clear_pending_confirmation(session_id)
+                skip_destination_detection = False
+        
+        # ============================================================
         # PASO 2: Obtener destino actual de la conversación
         # ============================================================
-        current_destination = conversation_history.get_current_destination(session_id)
-        print(f"📍 [API] Destino actual de la conversación: {current_destination or 'Ninguno'}")
+        if 'current_destination' not in locals():
+            current_destination = conversation_history.get_current_destination(session_id)
+            print(f"📍 [API] Destino actual de la conversación: {current_destination or 'Ninguno'}")
         
         # ============================================================
         # PASO 3: Si es formulario inicial, establecer destino y usar formato estructurado
         # ============================================================
-        use_structured_format = False
-        destination_string = None
+        if 'use_structured_format' not in locals():
+            use_structured_format = False
+        if 'destination_string' not in locals():
+            destination_string = None
         
         if is_form_submission:
             # Establecer destino actual
@@ -235,10 +317,11 @@ async def plan_travel(query: TravelQuery):
         # ============================================================
         # PASO 4: Si es pregunta de chat, detectar cambio de destino
         # ============================================================
-        elif is_chat_question:
-            # Añadir pregunta del usuario al historial (antes de detectar cambio)
-            conversation_history.add_message(session_id, 'user', query.question)
-            print(f"💬 [API] Pregunta añadida al historial")
+        elif is_chat_question and not skip_destination_detection:
+            # Añadir pregunta del usuario al historial (si no se añadió antes)
+            if not (pending_confirmation and 'is_response' in locals() and is_response):
+                conversation_history.add_message(session_id, 'user', query.question)
+                print(f"💬 [API] Pregunta añadida al historial")
             
             # Detectar si hay cambio de destino
             is_change, detected_dest, is_explicit = detect_destination_change(
@@ -249,28 +332,36 @@ async def plan_travel(query: TravelQuery):
             print(f"🔍 [API] Detección de destino: cambio={is_change}, detectado={detected_dest}, explícito={is_explicit}")
             
             # ============================================================
-            # PASO 5: Si hay cambio de destino (implícito), pedir confirmación
+            # PASO 5: Si hay cambio de destino (implícito), establecer confirmación pendiente
             # ============================================================
             if is_change and not is_explicit:
-                # Cambio implícito detectado - pedir confirmación
+                # Cambio implícito detectado - establecer confirmación pendiente y preguntar
                 confirmation_message = (
                     f"Veo que mencionaste '{detected_dest}' en tu pregunta. "
                     f"Actualmente estamos hablando sobre '{current_destination}'. "
                     f"¿Te gustaría cambiar el destino a '{detected_dest}' o prefieres continuar con '{current_destination}'?"
                 )
                 
+                # Establecer confirmación pendiente
+                conversation_history.set_pending_confirmation(
+                    session_id,
+                    detected_dest,
+                    current_destination,
+                    query.question  # Guardar pregunta original
+                )
+                
                 # Agregar mensaje de confirmación al historial
                 conversation_history.add_message(session_id, 'assistant', confirmation_message)
                 
-                print(f"❓ [API] Cambio implícito detectado - Solicitando confirmación al usuario")
+                print(f"❓ [API] Cambio implícito detectado - Confirmación pendiente establecida")
                 
-                # Retornar respuesta especial de confirmación
+                # Retornar mensaje de confirmación (sin requires_confirmation, se maneja en el chat)
                 return TravelResponse(
                     answer=confirmation_message,
                     session_id=session_id,
                     weather=None,
                     photos=None,
-                    requires_confirmation=True,
+                    requires_confirmation=False,  # Ya no se usa window.confirm
                     detected_destination=detected_dest,
                     current_destination=current_destination,
                     response_format="confirmation"
