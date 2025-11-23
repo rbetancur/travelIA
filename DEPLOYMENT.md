@@ -44,11 +44,21 @@ Antes de comenzar, asegúrate de tener:
    - Selecciona el repositorio `travelIA`
    - Vercel detectará automáticamente que es un proyecto React
 
-4. **Configura el proyecto:**
+4. **Configura el nombre del proyecto:**
+   - En el campo **"Private Repository Name"**, cambia `travelIA` a `travelia` (todo minúsculas)
+   - ⚠️ **Importante:** Vercel solo permite nombres en minúsculas, números y caracteres `.`, `_`, `-`
+   - Si no cambias esto, verás un error: "A Project name can only contain up to 100 lowercase letters..."
+
+5. **Configura el proyecto:**
    - **Framework Preset:** Create React App (detectado automáticamente)
    - **Root Directory:** `frontend`
    - **Build Command:** `npm run build` (automático)
    - **Output Directory:** `build` (automático)
+   - **Production Branch:** Cambia de `main` a `release/v1.0.0` (si tus cambios están en una rama release)
+
+> ⚠️ **Importante - Nombre del proyecto:** Vercel requiere que el nombre del proyecto esté en minúsculas. Si ves un error sobre el nombre, cambia `travelIA` a `travelia`.
+
+> ⚠️ **Importante - Rama:** Si tus cambios de despliegue están en una rama `release/v1.0.0` (y no en `main`), asegúrate de cambiar la **Production Branch** a `release/v1.0.0` durante la configuración. Si no lo ves en la configuración inicial, puedes cambiarlo después en **Settings** → **Git** → **Production Branch**.
 
 ### Paso 3: Configurar Variables de Entorno
 
@@ -86,7 +96,9 @@ Railway es perfecto para FastAPI y es **gratis** con límites generosos.
 
 1. Selecciona "Deploy from GitHub repo"
 2. Elige tu repositorio `travelIA`
-3. Selecciona el directorio `backend`
+3. **IMPORTANTE:** Configura:
+   - **Branch:** Cambia de `main` a `release/v1.0.0` (si tus cambios están en una rama release)
+   - **Root Directory:** `backend`
 
 #### Paso 3: Configurar el Proyecto
 
