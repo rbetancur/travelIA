@@ -80,7 +80,8 @@ function App() {
   const [realtimeInfo, setRealtimeInfo] = useState(null);
   const [loadingRealtimeInfo, setLoadingRealtimeInfo] = useState(false);
   const [showRealtimePanel, setShowRealtimePanel] = useState(false);
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [carouselIndex, setCarouselIndex] = useState(0); // Mantener para compatibilidad con código legacy
+  const [carouselIndices, setCarouselIndices] = useState({}); // Índices por mensaje: { 'result-0': 0, 'result-1': 2, ... }
   const [carouselDirection, setCarouselDirection] = useState('right');
   const contentScrollRef = useRef(null);
   const lastFormDataRef = useRef(null);
@@ -1316,8 +1317,30 @@ function App() {
       JSON.stringify(currentFormData) !== JSON.stringify(lastFormDataRef.current) ||
       tripType !== lastTripTypeRef.current;
     
-    // Agregar el mensaje directamente al timeline del chat (no al input)
-    setChatMessages(prev => [...prev, { role: 'user', content: preFilledQuestion.trim() }]);
+    // Verificar si el destino cambió específicamente
+    const destinationChanged = !lastFormDataRef.current || 
+      (lastFormDataRef.current.destination !== currentFormData.destination);
+    
+    // Verificar si el mensaje ya existe en el historial para evitar duplicados
+    const messageExists = chatMessages.some(msg => 
+      msg.role === 'user' && msg.content === preFilledQuestion.trim()
+    );
+    
+    // Si el destino cambió, limpiar el historial de chat y datos relacionados
+    if (destinationChanged) {
+      console.log('🔄 [FORMULARIO] Destino cambió, limpiando historial de chat');
+      setChatMessages([{ role: 'user', content: preFilledQuestion.trim() }]); // Limpiar y agregar nuevo mensaje
+      setResponse('');
+      setWeather(null);
+      setPhotos(null);
+      setRealtimeInfo(null);
+      setCarouselIndex(0);
+    } else if (!messageExists) {
+      // Si el destino no cambió y el mensaje no existe, agregar el mensaje al historial existente
+      setChatMessages(prev => [...prev, { role: 'user', content: preFilledQuestion.trim() }]);
+    } else {
+      console.log('ℹ️ [FORMULARIO] El mensaje ya existe en el historial, no se duplica');
+    }
     setQuestion(''); // Limpiar el input
     setShowForm(false);
     
@@ -1328,15 +1351,17 @@ function App() {
     if (!hasChanged && response && response.trim().length > 0) {
       console.log('💾 [FORMULARIO] Usando respuesta en caché (datos del formulario no cambiaron)');
       console.log('⚠️ [FORMULARIO] NO se consulta a Gemini - usando respuesta previa');
-      // Agregar la respuesta existente al timeline del chat
-      setChatMessages(prev => {
-        // Verificar si la respuesta ya está en el timeline para evitar duplicados
-        const lastMessage = prev[prev.length - 1];
-        if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content === response) {
-          return prev; // Ya está en el timeline
-        }
-        return [...prev, { role: 'assistant', content: response }];
-      });
+      // Verificar si la respuesta ya está en el timeline para evitar duplicados
+      const responseExists = chatMessages.some(msg => 
+        msg.role === 'assistant' && msg.content === response
+      );
+      
+      if (!responseExists) {
+        // Agregar la respuesta existente al timeline del chat solo si no existe
+        setChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      } else {
+        console.log('ℹ️ [FORMULARIO] La respuesta ya está en el timeline, no se duplica');
+      }
       // No hacer petición, solo mostrar la respuesta existente
       return;
     }
@@ -1738,7 +1763,34 @@ function App() {
   };
 
   // Función para navegar el carrusel
-  const navigateCarousel = (direction) => {
+  const navigateCarousel = (direction, resultId = null, currentContent = null) => {
+    // Si se proporciona resultId y currentContent, usar el contenido específico del mensaje
+    if (resultId && currentContent) {
+      const parsed = parseResponseSections(currentContent);
+      if (!parsed || !parsed.sections) return;
+      
+      const sectionKeys = Object.keys(parsed.sections);
+      if (sectionKeys.length === 0) return;
+      
+      setCarouselDirection(direction === 'next' ? 'right' : 'left');
+      
+      setCarouselIndices((prevIndices) => {
+        const currentIndex = prevIndices[resultId] || 0;
+        let newIndex;
+        if (direction === 'next') {
+          newIndex = (currentIndex + 1) % sectionKeys.length;
+        } else {
+          newIndex = (currentIndex - 1 + sectionKeys.length) % sectionKeys.length;
+        }
+        return {
+          ...prevIndices,
+          [resultId]: newIndex
+        };
+      });
+      return;
+    }
+    
+    // Código legacy para compatibilidad
     if (!response) return;
     
     const parsed = parseResponseSections(response);
@@ -2549,15 +2601,139 @@ function App() {
         <header className="chat-header">
           <div className="chat-header-content">
             <div className="chat-header-left">
-              <h1 className="chat-title">ViajeIA</h1>
-              <p className="chat-subtitle">
-                Alex, tu Consultor Personal de Viajes
-              </p>
+              <div className="chat-header-title-section">
+                <h1 className="chat-title">ViajeIA</h1>
+                <p className="chat-subtitle">
+                  Alex, tu Consultor Personal de Viajes
+                </p>
+              </div>
+              {/* Información del clima debajo del nombre en pantallas pequeñas */}
+              <div className="header-weather-info-mobile">
+                {/* Información del clima en el header - widget completo si hay weatherInfo */}
+                {weatherInfo && (
+                  <div className="header-weather-info">
+                    <div className="weather-header-container">
+                      <div className="weather-header-left">
+                        <Cloud className="weather-main-icon" />
+                        <div className="weather-header-left-content">
+                          <div className="weather-label">Clima Actual en</div>
+                          <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {weatherInfo.city}
+                            {formData.destination && (
+                              <button
+                                type="button"
+                                className="favorite-toggle-button"
+                                onClick={saveCurrentAsFavorite}
+                                title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  borderRadius: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'color 0.2s ease',
+                                  color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                  lineHeight: 1
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                }}
+                              >
+                                {isFavorite(formData.destination) ? (
+                                  <Heart size={16} fill="currentColor" />
+                                ) : (
+                                  <Heart size={16} />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="weather-header-divider"></div>
+                      <div className="weather-header-right">
+                        {weatherInfo.temperatura && (
+                          <div className="weather-detail-item">
+                            <Thermometer size={14} className="weather-detail-icon" />
+                            <span>{weatherInfo.temperatura}</span>
+                          </div>
+                        )}
+                        {weatherInfo.condiciones && (
+                          <div className="weather-detail-item">
+                            <Cloud size={14} className="weather-detail-icon" />
+                            <span>{weatherInfo.condiciones}</span>
+                          </div>
+                        )}
+                        {(weatherInfo.humedad || weatherInfo.viento) && (
+                          <div className="weather-detail-row">
+                            {weatherInfo.humedad && (
+                              <div className="weather-detail-item">
+                                <Droplets size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.humedad}</span>
+                              </div>
+                            )}
+                            {weatherInfo.viento && (
+                              <div className="weather-detail-item">
+                                <Wind size={14} className="weather-detail-icon" />
+                                <span>{weatherInfo.viento}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga */}
+                {!weatherInfo && formData.destination && !loading && (
+                  <div className="header-destination-simple">
+                    <span className="destination-name">{formData.destination}</span>
+                    <button
+                      type="button"
+                      className="favorite-toggle-button"
+                      onClick={saveCurrentAsFavorite}
+                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.2s ease',
+                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                        lineHeight: 1,
+                        marginLeft: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                      }}
+                    >
+                      {isFavorite(formData.destination) ? (
+                        <Heart size={16} fill="currentColor" />
+                      ) : (
+                        <Heart size={16} />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="chat-header-center">
-              {/* Información del clima en el header */}
+              {/* Información del clima en el header - widget completo si hay weatherInfo (solo en pantallas grandes) */}
               {weatherInfo && (
-                <div className="header-weather-info">
+                <div className="header-weather-info header-weather-info-desktop">
                   <div className="weather-header-container">
                     <div className="weather-header-left">
                       <Cloud className="weather-main-icon" />
@@ -2633,6 +2809,45 @@ function App() {
                       )}
                     </div>
                   </div>
+                </div>
+              )}
+              
+              {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga (solo en pantallas grandes) */}
+              {!weatherInfo && formData.destination && !loading && (
+                <div className="header-destination-simple header-destination-simple-desktop">
+                  <span className="destination-name">{formData.destination}</span>
+                  <button
+                    type="button"
+                    className="favorite-toggle-button"
+                    onClick={saveCurrentAsFavorite}
+                    title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'color 0.2s ease',
+                      color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                      lineHeight: 1,
+                      marginLeft: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                    }}
+                  >
+                    {isFavorite(formData.destination) ? (
+                      <Heart size={16} fill="currentColor" />
+                    ) : (
+                      <Heart size={16} />
+                    )}
+                  </button>
                 </div>
               )}
             </div>
@@ -2793,7 +3008,7 @@ function App() {
           <main className="chat-main">
             <div className="chat-messages" ref={chatContainerRef}>
               {/* Mensaje de bienvenida inicial - solo si no hay mensajes en el chat y no se está cargando */}
-              {chatMessages.length === 0 && !loading && question.trim() === '' && (
+              {chatMessages.length === 0 && !loading && (
                 <div className="message message-assistant welcome-message">
                   <div className="message-avatar">
                     <Luggage size={24} />
@@ -2812,7 +3027,7 @@ function App() {
                 </div>
               )}
 
-              {/* Historial de conversación - todos los mensajes enviados */}
+              {/* Historial de conversación - mensajes en orden secuencial */}
               {chatMessages.map((msg, msgIndex) => {
                 if (msg.role === 'user') {
                   return (
@@ -2825,29 +3040,7 @@ function App() {
                       </div>
                     </div>
                   );
-                }
-                return null;
-              })}
-
-              {/* Skeleton loader mientras se carga la respuesta - solo si hay mensajes del usuario esperando respuesta */}
-              {loading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user' && (
-                <div className="message message-assistant">
-                  <div className="message-avatar">
-                    <Luggage size={24} />
-                  </div>
-                  <div className="message-content">
-                    <div className="skeleton-message">
-                      <div className="skeleton skeleton-line" style={{ width: '80%' }}></div>
-                      <div className="skeleton skeleton-line" style={{ width: '60%' }}></div>
-                      <div className="skeleton skeleton-line" style={{ width: '90%' }}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Respuestas del asistente - todas las respuestas enviadas */}
-              {chatMessages.map((msg, msgIndex) => {
-                if (msg.role === 'assistant') {
+                } else if (msg.role === 'assistant') {
                   // Usar la respuesta actual si es la última y está cargando, sino usar el contenido guardado
                   const isLastResponse = msgIndex === chatMessages.length - 1 && !loading;
                   const responseToParse = isLastResponse && response ? response : msg.content;
@@ -2856,11 +3049,13 @@ function App() {
                   return (() => {
                     if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
                       const sectionKeys = Object.keys(parsed.sections);
-                      const validIndex = Math.min(carouselIndex, sectionKeys.length - 1);
+                      const resultId = `result-${msgIndex}`;
+                      // Obtener el índice del carrusel para este mensaje específico
+                      const messageCarouselIndex = carouselIndices[resultId] || 0;
+                      const validIndex = Math.min(messageCarouselIndex, sectionKeys.length - 1);
                       const currentSectionKey = sectionKeys[validIndex];
                       const currentSectionContent = parsed.sections[currentSectionKey];
                       const hasMultipleSections = sectionKeys.length > 1;
-                      const resultId = `result-${msgIndex}`;
                       // Por defecto, los resultados están expandidos (undefined !== false = true)
                       // Si está explícitamente en false, entonces está colapsado
                       const isExpanded = expandedResults[resultId] !== false;
@@ -2876,8 +3071,8 @@ function App() {
                               
                               {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
 
-                              {/* Contenido expandible */}
-                              <div className={`result-content ${isExpanded ? 'expanded' : ''}`}>
+                              {/* Contenido expandible - solo para respuestas con secciones */}
+                              <div className={`result-content result-content-with-sections ${isExpanded ? 'expanded' : ''}`}>
                                 {/* Texto antes de las secciones */}
                                 {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
                                   <div className="result-text">
@@ -2897,7 +3092,7 @@ function App() {
                                         <div className="section-nav">
                                           <button
                                             className="section-nav-btn"
-                                            onClick={() => navigateCarousel('prev')}
+                                            onClick={() => navigateCarousel('prev', resultId, responseToParse)}
                                             aria-label="Sección anterior"
                                           >
                                             <ChevronLeft size={18} />
@@ -2907,7 +3102,7 @@ function App() {
                                           </span>
                                           <button
                                             className="section-nav-btn"
-                                            onClick={() => navigateCarousel('next')}
+                                            onClick={() => navigateCarousel('next', resultId, responseToParse)}
                                             aria-label="Siguiente sección"
                                           >
                                             <ChevronRight size={18} />
@@ -2970,17 +3165,37 @@ function App() {
                 return null;
               })}
 
+              {/* Skeleton loader mientras se carga la respuesta - solo si hay mensajes del usuario esperando respuesta */}
+              {loading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user' && (
+                <div className="message message-assistant">
+                  <div className="message-avatar">
+                    <Luggage size={24} />
+                  </div>
+                  <div className="message-content">
+                    <div className="skeleton-message">
+                      <div className="skeleton skeleton-line" style={{ width: '80%' }}></div>
+                      <div className="skeleton skeleton-line" style={{ width: '60%' }}></div>
+                      <div className="skeleton skeleton-line" style={{ width: '90%' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Mostrar la última respuesta si está cargando o si no hay mensajes en chatMessages pero sí hay response */}
               {!loading && response && response.trim().length > 0 && chatMessages.length === 0 && (() => {
                 const parsed = parsedResponse;
                 
                 if (parsed && parsed.sections && Object.keys(parsed.sections).length > 0) {
                   const sectionKeys = Object.keys(parsed.sections);
-                  const validIndex = Math.min(carouselIndex, sectionKeys.length - 1);
+                  const resultId = `result-${Date.now()}`;
+                  // Obtener el índice del carrusel para este mensaje específico
+                  const messageCarouselIndex = carouselIndices[resultId] || 0;
+                  const validIndex = Math.min(messageCarouselIndex, sectionKeys.length - 1);
                   const currentSectionKey = sectionKeys[validIndex];
                   const currentSectionContent = parsed.sections[currentSectionKey];
                   const hasMultipleSections = sectionKeys.length > 1;
-                  const resultId = `result-${Date.now()}`;
+                  // Por defecto, los resultados están expandidos (undefined !== false = true)
+                  // Si está explícitamente en false, entonces está colapsado
                   const isExpanded = expandedResults[resultId] !== false;
 
                   return (
@@ -2994,8 +3209,8 @@ function App() {
 
                           {/* Las fotos ahora están en el encabezado fijo fuera del área de chat */}
 
-                          {/* Contenido expandible */}
-                          <div className={`result-content ${isExpanded ? 'expanded' : ''}`}>
+                          {/* Contenido expandible - solo para respuestas con secciones */}
+                          <div className={`result-content result-content-with-sections ${isExpanded ? 'expanded' : ''}`}>
                             {/* Texto antes de las secciones */}
                             {parsed.beforeText && parsed.beforeText.trim().length > 0 && (
                               <div className="result-text">
@@ -3015,7 +3230,7 @@ function App() {
                                     <div className="section-nav">
                                       <button
                                         className="section-nav-btn"
-                                        onClick={() => navigateCarousel('prev')}
+                                        onClick={() => navigateCarousel('prev', resultId, response)}
                                         aria-label="Sección anterior"
                                       >
                                         <ChevronLeft size={18} />
@@ -3025,7 +3240,7 @@ function App() {
                                       </span>
                                       <button
                                         className="section-nav-btn"
-                                        onClick={() => navigateCarousel('next')}
+                                        onClick={() => navigateCarousel('next', resultId, response)}
                                         aria-label="Siguiente sección"
                                       >
                                         <ChevronRight size={18} />
@@ -3174,7 +3389,7 @@ function App() {
                 <div className="chat-input-wrapper">
                   <textarea
                     className="chat-input"
-                    placeholder="Escribe tu pregunta aquí... (Ctrl+Enter para enviar)"
+                    placeholder="Escribe tu pregunta aquí... (Enter para enviar, Shift+Enter para nueva línea)"
                     value={question}
                     onChange={(e) => {
                       // NO limpiar la respuesta cuando el usuario escribe
@@ -3182,9 +3397,11 @@ function App() {
                       setQuestion(e.target.value);
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        handleSubmit(e);
+                        if (question.trim() && !loading) {
+                          handleSubmit(e);
+                        }
                       }
                     }}
                     rows="1"
@@ -3217,7 +3434,7 @@ function App() {
               type="button"
               className="floating-button modify-trip-float-button"
               onClick={() => setShowForm(true)}
-              disabled={showForm || !formData.destination || formData.destination.trim() === ''}
+              disabled={showForm || !formData.destination || formData.destination.trim() === '' || loading}
               aria-label="Modificar información del viaje"
             >
               <ArrowLeft size={24} className="floating-button-icon" />
@@ -3253,14 +3470,14 @@ function App() {
               type="button"
               className="floating-button history-float-button"
               onClick={() => {
-                if (sessionId && formData.destination && formData.destination.trim() !== '') {
+                if (sessionId && formData.destination && formData.destination.trim() !== '' && !loading) {
                   setShowHistory(!showHistory);
                   if (!showHistory && sessionId) {
                     loadConversationHistory();
                   }
                 }
               }}
-              disabled={!sessionId || !formData.destination || formData.destination.trim() === ''}
+              disabled={!sessionId || !formData.destination || formData.destination.trim() === '' || loading}
               aria-label="Ver historial de conversaciones"
             >
               <History size={24} className="floating-button-icon" />
@@ -3284,7 +3501,7 @@ function App() {
               type="button"
               className="floating-button download-itinerary-float-button"
               onClick={handleDownloadItinerary}
-              disabled={!sessionId || !formData.destination || formData.destination.trim() === '' || !response || response.trim() === ''}
+              disabled={!sessionId || !formData.destination || formData.destination.trim() === '' || !response || response.trim() === '' || loading}
               aria-label="Descargar itinerario en PDF"
             >
               <Download size={24} className="floating-button-icon" />
@@ -3319,11 +3536,14 @@ function App() {
               type="button"
               className="floating-button favorites-float-button"
               onClick={() => {
-                setShowFavorites(!showFavorites);
-                if (!showFavorites) {
-                  loadFavorites();
+                if (!loading) {
+                  setShowFavorites(!showFavorites);
+                  if (!showFavorites) {
+                    loadFavorites();
+                  }
                 }
               }}
+              disabled={loading}
               aria-label="Mis Viajes Guardados"
             >
               <Bookmark size={24} className="floating-button-icon" />
@@ -3345,7 +3565,7 @@ function App() {
               className="floating-button-wrapper realtime-button-wrapper"
               onMouseLeave={(e) => {
                 // Si el mouse sale del wrapper y no va al panel, ocultar
-                if (!e.relatedTarget || !e.relatedTarget.closest('.realtime-info-panel-float')) {
+                if (!e.relatedTarget || !(e.relatedTarget instanceof Element) || !e.relatedTarget.closest('.realtime-info-panel-float')) {
                   setShowRealtimePanel(false);
                 }
               }}
@@ -3373,7 +3593,7 @@ function App() {
               onMouseEnter={() => setShowRealtimePanel(true)}
               onMouseLeave={(e) => {
                 // Si el mouse sale del panel y no va al botón, ocultar
-                if (!e.relatedTarget || !e.relatedTarget.closest('.realtime-button-wrapper')) {
+                if (!e.relatedTarget || !(e.relatedTarget instanceof Element) || !e.relatedTarget.closest('.realtime-button-wrapper')) {
                   setShowRealtimePanel(false);
                 }
               }}
