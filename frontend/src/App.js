@@ -2184,29 +2184,13 @@ function App() {
       <div className="app-layout">
         <div className="container">
           <header className="header">
-          <div className="header-left">
-            <button 
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="back-to-form-button-header"
-              title="Modificar información del viaje"
-            >
-              <ArrowLeft size={14} />
-              <span>Modificar viaje</span>
-            </button>
-          </div>
-          <div className="header-center">
             <h1 className="title">ViajeIA</h1>
             <p className="subtitle">
               Alex, tu Consultor Personal de Viajes{' '}
               <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
               <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
             </p>
-          </div>
-          <div className="header-right">
-            {/* El botón de historial ahora está en el contenedor flotante */}
-          </div>
-        </header>
+          </header>
 
         <main className="main-content">
 
