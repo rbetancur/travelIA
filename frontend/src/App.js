@@ -1614,14 +1614,33 @@ function App() {
       link.href = downloadUrl;
       
       // Obtener nombre del archivo del header o usar uno por defecto
-      const contentDisposition = response.headers['content-disposition'];
+      const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
       let filename = 'itinerario_viajeia.pdf';
+      
+      console.log('📋 [PDF] Content-Disposition header:', contentDisposition);
+      
       if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        // Intentar múltiples formatos de Content-Disposition
+        // Formato 1: filename="nombre.pdf"
+        let filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
         if (filenameMatch) {
-          filename = filenameMatch[1];
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        } else {
+          // Formato 2: filename*=UTF-8''nombre.pdf
+          filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+          if (filenameMatch) {
+            filename = decodeURIComponent(filenameMatch[1]);
+          } else {
+            // Formato 3: filename=nombre.pdf (sin comillas)
+            filenameMatch = contentDisposition.match(/filename=([^;]+)/);
+            if (filenameMatch) {
+              filename = filenameMatch[1].trim().replace(/['"]/g, '');
+            }
+          }
         }
       }
+      
+      console.log('📄 [PDF] Nombre del archivo extraído:', filename);
       
       link.download = filename;
       document.body.appendChild(link);
@@ -2255,6 +2274,96 @@ function App() {
               </button>
             </div>
           </form>
+
+          {/* Skeleton loader mientras se carga la respuesta */}
+          {loading && (
+            <div className="skeleton-response-container">
+              <div className="skeleton-response-header">
+                <div className="skeleton-response-header-left">
+                  <div className="skeleton skeleton-title"></div>
+                  <div className="skeleton skeleton-icon"></div>
+                </div>
+                <div className="skeleton-response-header-right">
+                  <div className="skeleton-weather-container">
+                    <div className="skeleton-weather-left">
+                      <div className="skeleton skeleton-weather-icon"></div>
+                      <div className="skeleton-weather-content">
+                        <div className="skeleton skeleton-weather-label"></div>
+                        <div className="skeleton skeleton-weather-city"></div>
+                      </div>
+                    </div>
+                    <div className="skeleton-weather-divider"></div>
+                    <div className="skeleton-weather-right">
+                      <div className="skeleton-weather-detail">
+                        <div className="skeleton skeleton-weather-detail-icon"></div>
+                        <div className="skeleton skeleton-weather-detail-text"></div>
+                      </div>
+                      <div className="skeleton-weather-detail">
+                        <div className="skeleton skeleton-weather-detail-icon"></div>
+                        <div className="skeleton skeleton-weather-detail-text"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="skeleton-response-content">
+                {/* Skeleton para fotos del destino */}
+                <div className="skeleton-photos-container">
+                  <div className="skeleton-photos-header">
+                    <div className="skeleton skeleton-photos-icon"></div>
+                    <div className="skeleton skeleton-photos-title"></div>
+                  </div>
+                  <div className="skeleton-photos-grid">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="skeleton skeleton-photo-item"></div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Skeleton para texto antes del carrusel */}
+                <div className="skeleton-text-container response-text-before">
+                  <div className="skeleton skeleton-text-line long"></div>
+                  <div className="skeleton skeleton-text-line long"></div>
+                  <div className="skeleton skeleton-text-line medium"></div>
+                </div>
+                
+                {/* Skeleton para carrusel */}
+                <div className="skeleton-carousel-container">
+                  <div className="skeleton-carousel-card">
+                    <div className="skeleton-carousel-header">
+                      <div className="skeleton-carousel-header-left">
+                        <div className="skeleton skeleton-carousel-button"></div>
+                        <div className="skeleton skeleton-carousel-title"></div>
+                      </div>
+                      <div className="skeleton-carousel-header-right">
+                        <div className="skeleton skeleton-carousel-indicator"></div>
+                        <div className="skeleton skeleton-carousel-button"></div>
+                      </div>
+                    </div>
+                    <div className="skeleton-carousel-content">
+                      {/* Skeleton para recomendaciones */}
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="skeleton-recommendation-item">
+                          <div className="skeleton skeleton-recommendation-bullet"></div>
+                          <div className="skeleton-recommendation-content">
+                            <div className="skeleton skeleton-recommendation-subtitle"></div>
+                            <div className="skeleton skeleton-recommendation-description long"></div>
+                            <div className="skeleton skeleton-recommendation-description short"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Skeleton para texto después del carrusel */}
+                <div className="skeleton-text-container response-text-after">
+                  <div className="skeleton skeleton-text-line long"></div>
+                  <div className="skeleton skeleton-text-line medium"></div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Solo mostrar respuesta si no está cargando y hay una respuesta válida */}
           {!loading && response && response.trim().length > 0 && (() => {

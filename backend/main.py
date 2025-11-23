@@ -121,6 +121,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "Content-Type"],  # Exponer headers necesarios para descarga de archivos
 )
 
 
@@ -260,12 +261,17 @@ async def generate_itinerary_pdf(
         
         print(f"📄 [API] Nombre del archivo: {filename}")
         
-        # Retornar PDF como respuesta
+        # Codificar el nombre del archivo para URL (RFC 5987)
+        from urllib.parse import quote
+        encoded_filename = quote(filename, safe='')
+        
+        # Retornar PDF como respuesta con headers correctos
         return Response(
             content=pdf_buffer.read(),
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"'
+                "Content-Disposition": f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}',
+                "Content-Type": "application/pdf"
             }
         )
         
