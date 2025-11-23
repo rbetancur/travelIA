@@ -115,9 +115,15 @@ realtime_info_service = RealtimeInfoService()
 print("✅ Servicio de información en tiempo real inicializado")
 
 # Configurar CORS para permitir requests del frontend
+# En producción, permite orígenes desde variable de entorno o todos los orígenes
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+# Si está en producción (Railway, Vercel, etc.), permite todos los orígenes por defecto
+if os.getenv("ENVIRONMENT") == "production":
+    allowed_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React por defecto corre en puerto 3000
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
