@@ -72,6 +72,8 @@ function App() {
   const [hoverDate, setHoverDate] = useState(null);
   const [modalTripType, setModalTripType] = useState('round-trip'); // 'round-trip' o 'one-way'
   const [showTravelersModal, setShowTravelersModal] = useState(false);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showPreferenceModal, setShowPreferenceModal] = useState(false);
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
   const [weather, setWeather] = useState(null);
@@ -661,6 +663,8 @@ function App() {
     return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
   };
 
+
+
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -803,6 +807,29 @@ function App() {
     });
   };
 
+  // Funciones para manejar selección de mes y año
+  // Navegación por teclado
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Solo procesar si estamos en el modal de fechas
+      if (!showDateModal) return;
+
+      // Flechas izquierda/derecha: navegar meses
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (event.key === 'ArrowLeft') {
+          navigateMonth(-1);
+        } else {
+          navigateMonth(1);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showDateModal]);
+
   const renderCalendar = (monthOffset = 0) => {
     const displayDate = new Date(calendarMonth);
     displayDate.setMonth(displayDate.getMonth() + monthOffset);
@@ -814,7 +841,7 @@ function App() {
     today.setHours(0, 0, 0, 0);
     
     const days = [];
-    const weekDays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const weekDays = ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sá'];
 
     // Días del mes anterior
     const prevMonth = new Date(displayDate);
@@ -850,8 +877,15 @@ function App() {
       days.push({ day, date, isCurrentMonth: false });
     }
 
+    const monthName = displayDate.toLocaleDateString('es-ES', { month: 'long' });
+    const year = displayDate.getFullYear();
+    
     return (
       <div className="calendar-month">
+        <div className="calendar-month-header-inline">
+          <span className="month-name">{monthName}</span>
+          <span className="year"> {year}</span>
+        </div>
         <div className="calendar-weekdays">
           {weekDays.map(day => (
             <div key={day} className="calendar-weekday">{day}</div>
@@ -937,6 +971,29 @@ function App() {
 
   const handleCloseTravelersModal = () => {
     setShowTravelersModal(false);
+  };
+
+  const handleOpenBudgetModal = () => {
+    setShowBudgetModal(true);
+  };
+
+  const handleCloseBudgetModal = () => {
+    setShowBudgetModal(false);
+  };
+
+  const handleOpenPreferenceModal = () => {
+    setShowPreferenceModal(true);
+  };
+
+  const handleClosePreferenceModal = () => {
+    setShowPreferenceModal(false);
+  };
+
+  const getPreferenceLabel = () => {
+    if (formData.preference === 'aventura') return 'Aventura';
+    if (formData.preference === 'relajación') return 'Relajación';
+    if (formData.preference === 'cultura') return 'Cultura';
+    return 'Selecciona una preferencia';
   };
 
   // Memoizar función de carga de destinos populares
@@ -2388,37 +2445,87 @@ function App() {
                       </div>
 
                       <div className="calendar-navigation">
-                        <button 
-                          type="button"
-                          className="calendar-nav-button"
-                          onClick={() => navigateMonth(-1)}
-                        >
-                          <ChevronLeft size={24} />
-                        </button>
-                        <div className="calendar-months">
-                          <div className="calendar-month-header">
-                            {getMonthName(calendarMonth)}
-                          </div>
-                          <div className="calendar-month-header">
-                            {(() => {
-                              const nextMonth = new Date(calendarMonth);
-                              nextMonth.setMonth(nextMonth.getMonth() + 1);
-                              return getMonthName(nextMonth);
-                            })()}
-                          </div>
-                        </div>
-                        <button 
-                          type="button"
-                          className="calendar-nav-button"
-                          onClick={() => navigateMonth(1)}
-                        >
-                          <ChevronRight size={24} />
-                        </button>
+                        {(() => {
+                          // Verificar si el mes actual mostrado es el mes actual del sistema
+                          const today = new Date();
+                          const currentYear = today.getFullYear();
+                          const currentMonth = today.getMonth();
+                          const isAtCurrentMonth = calendarMonth.getFullYear() === currentYear && 
+                                                   calendarMonth.getMonth() === currentMonth;
+                          
+                          // Verificar si el segundo mes mostrado es el último disponible (mes actual + 11 meses)
+                          const secondMonth = new Date(calendarMonth);
+                          secondMonth.setMonth(secondMonth.getMonth() + 1);
+                          const lastAvailableMonth = new Date(currentYear, currentMonth + 11, 1);
+                          const isAtLastMonth = secondMonth.getFullYear() === lastAvailableMonth.getFullYear() &&
+                                                secondMonth.getMonth() === lastAvailableMonth.getMonth();
+                          
+                          return (
+                            <>
+                              {!isAtCurrentMonth && (
+                                <button 
+                                  type="button"
+                                  className="calendar-nav-button"
+                                  onClick={() => navigateMonth(-1)}
+                                >
+                                  <ChevronLeft size={24} />
+                                </button>
+                              )}
+                              {isAtCurrentMonth && <div style={{ width: '40px' }} />}
+                              <div className="calendar-months">
+                                <div className="calendar-month-header">
+                                  <span className="month-name">
+                                    {calendarMonth.toLocaleDateString('es-ES', { month: 'long' })}
+                                  </span>
+                                  <span className="year">
+                                    {' '}{calendarMonth.getFullYear()}
+                                  </span>
+                                </div>
+                                <div className="calendar-month-header">
+                                  {(() => {
+                                    const nextMonth = new Date(calendarMonth);
+                                    nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                    return (
+                                      <>
+                                        <span className="month-name">
+                                          {nextMonth.toLocaleDateString('es-ES', { month: 'long' })}
+                                        </span>
+                                        <span className="year">
+                                          {' '}{nextMonth.getFullYear()}
+                                        </span>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                              {!isAtLastMonth && (
+                                <button 
+                                  type="button"
+                                  className="calendar-nav-button"
+                                  onClick={() => navigateMonth(1)}
+                                >
+                                  <ChevronRight size={24} />
+                                </button>
+                              )}
+                              {isAtLastMonth && <div style={{ width: '40px' }} />}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="calendar-container">
                         {renderCalendar(0)}
                         {renderCalendar(1)}
+                        {renderCalendar(2)}
+                        {renderCalendar(3)}
+                        {renderCalendar(4)}
+                        {renderCalendar(5)}
+                        {renderCalendar(6)}
+                        {renderCalendar(7)}
+                        {renderCalendar(8)}
+                        {renderCalendar(9)}
+                        {renderCalendar(10)}
+                        {renderCalendar(11)}
                       </div>
 
                       <div className="date-modal-footer">
@@ -2465,7 +2572,7 @@ function App() {
                   <select
                     id="budget"
                     name="budget"
-                    className="form-input"
+                    className="form-input budget-select-desktop"
                     value={formData.budget}
                     onChange={handleInputChange}
                     required
@@ -2477,6 +2584,17 @@ function App() {
                     <option value="$2,500 - $5,000">$2,500 - $5,000</option>
                     <option value="Más de $5,000">Más de $5,000</option>
                   </select>
+                  <div className="budget-input-disabled" onClick={handleOpenBudgetModal}>
+                    <DollarSign className="budget-icon" size={20} />
+                    <input
+                      type="text"
+                      className="form-input budget-input-disabled-field"
+                      value={formData.budget || 'Selecciona un rango'}
+                      placeholder="Selecciona un rango"
+                      readOnly
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2590,11 +2708,142 @@ function App() {
                 </div>
               )}
 
+              {/* Modal de Presupuesto */}
+              {showBudgetModal && (
+                <div className="travelers-modal-overlay" onClick={handleCloseBudgetModal}>
+                  <div className="travelers-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="travelers-modal-header">
+                      <button 
+                        type="button" 
+                        className="travelers-modal-close"
+                        onClick={handleCloseBudgetModal}
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                    
+                    <div className="travelers-modal-content">
+                      <h3 className="travelers-modal-title">Seleccionar presupuesto</h3>
+                      
+                      <div className="budget-options">
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === 'Menos de $500' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: 'Menos de $500' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          Menos de $500
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === '$500 - $1,000' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: '$500 - $1,000' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          $500 - $1,000
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === '$1,000 - $2,500' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: '$1,000 - $2,500' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          $1,000 - $2,500
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === '$2,500 - $5,000' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: '$2,500 - $5,000' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          $2,500 - $5,000
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === 'Más de $5,000' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: 'Más de $5,000' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          Más de $5,000
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de Preferencias */}
+              {showPreferenceModal && (
+                <div className="travelers-modal-overlay" onClick={handleClosePreferenceModal}>
+                  <div className="travelers-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="travelers-modal-header">
+                      <button 
+                        type="button" 
+                        className="travelers-modal-close"
+                        onClick={handleClosePreferenceModal}
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                    
+                    <div className="travelers-modal-content">
+                      <h3 className="travelers-modal-title">Seleccionar preferencia</h3>
+                      
+                      <div className="preference-options-modal">
+                        <button
+                          type="button"
+                          className={`preference-option-modal ${formData.preference === 'aventura' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, preference: 'aventura' }));
+                            handleClosePreferenceModal();
+                          }}
+                        >
+                          <Mountain size={24} style={{ marginRight: '12px' }} />
+                          <span>Aventura</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`preference-option-modal ${formData.preference === 'relajación' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, preference: 'relajación' }));
+                            handleClosePreferenceModal();
+                          }}
+                        >
+                          <Umbrella size={24} style={{ marginRight: '12px' }} />
+                          <span>Relajación</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`preference-option-modal ${formData.preference === 'cultura' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, preference: 'cultura' }));
+                            handleClosePreferenceModal();
+                          }}
+                        >
+                          <Landmark size={24} style={{ marginRight: '12px' }} />
+                          <span>Cultura</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label className="form-label">
                   ¿Prefieres aventura, relajación o cultura?
                 </label>
-                <div className="preference-buttons">
+                <div className="preference-buttons preference-buttons-desktop">
                   <button
                     type="button"
                     className={`preference-button ${formData.preference === 'aventura' ? 'active' : ''}`}
@@ -2620,24 +2869,41 @@ function App() {
                     Cultura
                   </button>
                 </div>
+                <div className="preference-input-disabled" onClick={handleOpenPreferenceModal}>
+                  {formData.preference === 'aventura' && <Mountain className="preference-icon" size={20} />}
+                  {formData.preference === 'relajación' && <Umbrella className="preference-icon" size={20} />}
+                  {formData.preference === 'cultura' && <Landmark className="preference-icon" size={20} />}
+                  {!formData.preference && <Landmark className="preference-icon" size={20} />}
+                  <input
+                    type="text"
+                    className="form-input preference-input-disabled-field"
+                    value={getPreferenceLabel()}
+                    placeholder="Selecciona una preferencia"
+                    readOnly
+                    required
+                  />
+                </div>
               </div>
 
-              <button 
-                type="submit" 
-                className="submit-button"
-                disabled={
-                  !formData.destination || 
-                  !formData.departureDate || 
-                  (tripType === 'closed' && !formData.returnDate) || 
-                  formData.adults < 1 ||
-                  !formData.budget || 
-                  !formData.preference
-                }
-              >
-                Continuar <ArrowRight size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
-              </button>
+              
             </form>
           </main>
+          <div className="form-footer">
+                <button 
+                  type="submit" 
+                  className="submit-button"
+                  disabled={
+                    !formData.destination || 
+                    !formData.departureDate || 
+                    (tripType === 'closed' && !formData.returnDate) || 
+                    formData.adults < 1 ||
+                    !formData.budget || 
+                    !formData.preference
+                  }
+                >
+                  Continuar <ArrowRight size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
+                </button>
+              </div>
         </div>
       </div>
     );
