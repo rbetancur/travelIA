@@ -523,8 +523,9 @@ function App() {
   // Memoizar cálculo de días
   const calculateDays = useCallback((departure, returnDate) => {
     if (!departure || !returnDate) return 0;
-    const dep = new Date(departure);
-    const ret = new Date(returnDate);
+    const dep = parseLocalDateString(departure);
+    const ret = parseLocalDateString(returnDate);
+    if (!dep || !ret) return 0;
     const diffTime = Math.abs(ret - dep);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
@@ -541,27 +542,31 @@ function App() {
   const handleQuickDurationSelect = (days) => {
     if (!formData.departureDate) {
       // Si no hay fecha de ida, establecerla como hoy
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = formatDateToLocalString(today);
       setFormData(prev => ({
         ...prev,
-        departureDate: today
+        departureDate: todayStr
       }));
       // Calcular fecha de regreso
-      const returnDate = new Date();
+      const returnDate = new Date(today);
       returnDate.setDate(returnDate.getDate() + days);
       setFormData(prev => ({
         ...prev,
-        returnDate: returnDate.toISOString().split('T')[0]
+        returnDate: formatDateToLocalString(returnDate)
       }));
     } else {
       // Calcular fecha de regreso basada en la fecha de ida
-      const departure = new Date(formData.departureDate);
-      const returnDate = new Date(departure);
-      returnDate.setDate(returnDate.getDate() + days);
-      setFormData(prev => ({
-        ...prev,
-        returnDate: returnDate.toISOString().split('T')[0]
-      }));
+      const departure = parseLocalDateString(formData.departureDate);
+      if (departure) {
+        const returnDate = new Date(departure);
+        returnDate.setDate(returnDate.getDate() + days);
+        setFormData(prev => ({
+          ...prev,
+          returnDate: formatDateToLocalString(returnDate)
+        }));
+      }
     }
   };
 
@@ -587,6 +592,28 @@ function App() {
     setHoverDate(null);
   };
 
+  // Funciones helper para manejo de fechas en zona horaria local
+  const formatDateToLocalString = (date) => {
+    if (!date) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseLocalDateString = (dateString) => {
+    if (!dateString) return null;
+    // Parsear "YYYY-MM-DD" como fecha local, no UTC
+    const parts = dateString.split('-');
+    if (parts.length !== 3) return null;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // Los meses en JS son 0-indexed
+    const day = parseInt(parts[2], 10);
+    const date = new Date(year, month, day);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+
   const toggleTripType = () => {
     if (tripType === 'closed') {
       setTripType('open');
@@ -599,25 +626,30 @@ function App() {
       setTripType('closed');
       // Si hay fecha de ida, calcular fecha de regreso (7 días por defecto)
       if (formData.departureDate) {
-        const departure = new Date(formData.departureDate);
-        const returnDate = new Date(departure);
-        returnDate.setDate(returnDate.getDate() + 7);
-        setFormData(prev => ({
-          ...prev,
-          returnDate: returnDate.toISOString().split('T')[0]
-        }));
+        const departure = parseLocalDateString(formData.departureDate);
+        if (departure) {
+          const returnDate = new Date(departure);
+          returnDate.setDate(returnDate.getDate() + 7);
+          setFormData(prev => ({
+            ...prev,
+            returnDate: formatDateToLocalString(returnDate)
+          }));
+        }
       }
     }
   };
 
   const getTodayDate = () => {
-    return new Date().toISOString().split('T')[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return formatDateToLocalString(today);
   };
 
   // Funciones para el calendario
   const formatDateForDisplay = (dateString) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    const date = parseLocalDateString(dateString);
+    if (!date) return '';
     return date.toLocaleDateString('es-ES', { 
       day: 'numeric', 
       month: 'short',
@@ -689,9 +721,9 @@ function App() {
 
   const handleApplyDates = () => {
     if (selectedStartDate) {
-      const startDateStr = selectedStartDate.toISOString().split('T')[0];
+      const startDateStr = formatDateToLocalString(selectedStartDate);
       const endDateStr = modalTripType === 'round-trip' && selectedEndDate 
-        ? selectedEndDate.toISOString().split('T')[0] 
+        ? formatDateToLocalString(selectedEndDate) 
         : '';
       
       setFormData(prev => ({
@@ -719,28 +751,34 @@ function App() {
     if (modalTripType === 'one-way') return 0;
     if (!selectedEndDate) return 0;
     return calculateDays(
-      selectedStartDate.toISOString().split('T')[0],
-      selectedEndDate.toISOString().split('T')[0]
+      formatDateToLocalString(selectedStartDate),
+      formatDateToLocalString(selectedEndDate)
     );
   };
 
   const handleOpenDateModal = () => {
     // Inicializar con fechas existentes si las hay
     if (formData.departureDate) {
-      const depDate = new Date(formData.departureDate);
-      depDate.setHours(0, 0, 0, 0);
-      setSelectedStartDate(depDate);
-      // Establecer el mes del calendario basado en la fecha de ida
-      setCalendarMonth(new Date(depDate.getFullYear(), depDate.getMonth(), 1));
+      const depDate = parseLocalDateString(formData.departureDate);
+      if (depDate) {
+        setSelectedStartDate(depDate);
+        // Establecer el mes del calendario basado en la fecha de ida
+        setCalendarMonth(new Date(depDate.getFullYear(), depDate.getMonth(), 1));
+      } else {
+        // Si no hay fecha, mostrar el mes actual
+        const today = new Date();
+        setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+      }
     } else {
       // Si no hay fecha, mostrar el mes actual
       const today = new Date();
       setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
     }
     if (formData.returnDate) {
-      const retDate = new Date(formData.returnDate);
-      retDate.setHours(0, 0, 0, 0);
-      setSelectedEndDate(retDate);
+      const retDate = parseLocalDateString(formData.returnDate);
+      if (retDate) {
+        setSelectedEndDate(retDate);
+      }
     }
     // Establecer tipo de viaje en el modal basado en tripType
     setModalTripType(tripType === 'open' ? 'one-way' : 'round-trip');
@@ -1445,16 +1483,16 @@ function App() {
     
     // Validación de fechas: si se cambia la fecha de ida y la de regreso es anterior, ajustarla
     if (name === 'departureDate' && tripType === 'closed' && formData.returnDate) {
-      const newDeparture = new Date(value);
-      const currentReturn = new Date(formData.returnDate);
-      if (currentReturn < newDeparture) {
+      const newDeparture = parseLocalDateString(value);
+      const currentReturn = parseLocalDateString(formData.returnDate);
+      if (newDeparture && currentReturn && currentReturn < newDeparture) {
         // Ajustar fecha de regreso para que sea igual o posterior a la de ida
         const adjustedReturn = new Date(newDeparture);
         adjustedReturn.setDate(adjustedReturn.getDate() + 7); // Por defecto 7 días después
         setFormData(prev => ({
           ...prev,
           [name]: value,
-          returnDate: adjustedReturn.toISOString().split('T')[0]
+          returnDate: formatDateToLocalString(adjustedReturn)
         }));
         return;
       }
@@ -2248,7 +2286,10 @@ function App() {
                   <div className="days-info-row">
                     <span className="days-info-text">
                       <Unlock size={16} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
-                      Viaje abierto desde {new Date(formData.departureDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      Viaje abierto desde {(() => {
+                        const date = parseLocalDateString(formData.departureDate);
+                        return date ? date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+                      })()}
                     </span>
                   </div>
                 )}
@@ -2278,7 +2319,7 @@ function App() {
                               <Calendar className="modal-calendar-icon" size={20} />
                               <input
                                 type="text"
-                                value={selectedStartDate ? formatDateForDisplay(selectedStartDate.toISOString().split('T')[0]) : ''}
+                                value={selectedStartDate ? formatDateForDisplay(formatDateToLocalString(selectedStartDate)) : ''}
                                 placeholder="Seleccionar fecha"
                                 readOnly
                               />
@@ -2290,7 +2331,7 @@ function App() {
                               <Calendar className="modal-calendar-icon" size={20} />
                               <input
                                 type="text"
-                                value={selectedEndDate ? formatDateForDisplay(selectedEndDate.toISOString().split('T')[0]) : ''}
+                                value={selectedEndDate ? formatDateForDisplay(formatDateToLocalString(selectedEndDate)) : ''}
                                 placeholder="Seleccionar fecha"
                                 readOnly
                                 disabled={modalTripType === 'one-way'}
@@ -3884,21 +3925,27 @@ function App() {
                                   {favorite.departureDate && (
                                     <span className="favorite-date">
                                       <Calendar size={14} />
-                                      Salida: {new Date(favorite.departureDate).toLocaleDateString('es-ES', { 
-                                        day: 'numeric', 
-                                        month: 'short', 
-                                        year: 'numeric' 
-                                      })}
+                                      Salida: {(() => {
+                                        const date = parseLocalDateString(favorite.departureDate);
+                                        return date ? date.toLocaleDateString('es-ES', { 
+                                          day: 'numeric', 
+                                          month: 'short', 
+                                          year: 'numeric' 
+                                        }) : '';
+                                      })()}
                                     </span>
                                   )}
                                   {favorite.returnDate && (
                                     <span className="favorite-date">
                                       <Calendar size={14} />
-                                      Regreso: {new Date(favorite.returnDate).toLocaleDateString('es-ES', { 
-                                        day: 'numeric', 
-                                        month: 'short', 
-                                        year: 'numeric' 
-                                      })}
+                                      Regreso: {(() => {
+                                        const date = parseLocalDateString(favorite.returnDate);
+                                        return date ? date.toLocaleDateString('es-ES', { 
+                                          day: 'numeric', 
+                                          month: 'short', 
+                                          year: 'numeric' 
+                                        }) : '';
+                                      })()}
                                     </span>
                                   )}
                                 </div>
