@@ -2890,8 +2890,9 @@ function App() {
           </main>
           <div className="form-footer">
                 <button 
-                  type="submit" 
+                  type="button" 
                   className="submit-button"
+                  onClick={handleFormSubmit}
                   disabled={
                     !formData.destination || 
                     !formData.departureDate || 
