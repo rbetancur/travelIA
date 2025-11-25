@@ -4714,6 +4714,7 @@ html, body {
   gap: 0.75rem;
   align-items: center;
   box-sizing: border-box;
+  overflow: visible;
 }
 
 /* En pantallas grandes, alinear con el borde derecho del chat (900px + padding) */
@@ -4749,6 +4750,7 @@ html, body {
   position: relative;
   display: flex;
   align-items: center;
+  overflow: visible;
 }
 
 /* Estilo base para todos los botones flotantes */
@@ -4853,14 +4855,14 @@ html, body {
   position: absolute;
   right: calc(100% + 16px);
   top: 50%;
-  transform: translateY(-50%);
   background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   color: white;
-  padding: 10px 16px;
+  padding: 12px 18px;
   border-radius: 12px;
   font-size: 0.875rem;
   font-weight: 500;
   white-space: nowrap;
+  min-width: max-content;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -4971,11 +4973,24 @@ html, body {
 
 /* Contenedor para panel flotante - posicionado relativo al contenedor de botones */
 .realtime-info-wrapper {
-  position: absolute;
-  bottom: 0;
-  right: 0;
+  position: fixed;
+  bottom: 1.875rem;
   z-index: 1001;
   pointer-events: none;
+}
+
+/* Posicionar el panel a la izquierda del contenedor de botones en pantallas grandes */
+@media (min-width: 1200px) {
+  .realtime-info-wrapper {
+    right: calc((100vw - 56.25rem) / 2 - 6.25rem + 64px + 16px);
+  }
+}
+
+/* Posicionar el panel a la izquierda del contenedor de botones en pantallas medianas */
+@media (min-width: 1000px) and (max-width: 1199px) {
+  .realtime-info-wrapper {
+    right: calc(1.25rem + 64px + 16px);
+  }
 }
 
 .realtime-info-wrapper > * {
@@ -4985,6 +5000,7 @@ html, body {
 /* Wrapper del botón realtime para manejar eventos de mouse */
 .realtime-button-wrapper {
   position: relative;
+  overflow: visible;
 }
 
 /* Botón flotante para información en tiempo real */
@@ -5063,6 +5079,7 @@ html, body {
   max-height: calc(100vh - 140px);
   overflow-y: auto;
   animation: slideUpFade 0.3s ease-out;
+  transform-origin: right center;
 }
 
 @keyframes slideUpFade {
@@ -5262,7 +5279,6 @@ html, body {
   
   .floating-tooltip::after {
     left: 50%;
-    top: 100%;
     top: auto;
     bottom: -12px;
     transform: translateX(-50%);
