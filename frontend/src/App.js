@@ -894,15 +894,16 @@ function App() {
         <div className="calendar-days">
           {days.map(({ day, date, isCurrentMonth }, index) => {
             const isPast = isDatePast(date);
-            const isStart = selectedStartDate && date.getTime() === selectedStartDate.getTime();
-            const isEnd = selectedEndDate && date.getTime() === selectedEndDate.getTime();
-            const isInRange = selectedStartDate && selectedEndDate && 
+            // Solo marcar como seleccionado si pertenece al mes actual
+            const isStart = isCurrentMonth && selectedStartDate && date.getTime() === selectedStartDate.getTime();
+            const isEnd = isCurrentMonth && selectedEndDate && date.getTime() === selectedEndDate.getTime();
+            const isInRange = isCurrentMonth && selectedStartDate && selectedEndDate && 
               isDateInRange(date, selectedStartDate, selectedEndDate);
             const isToday = date.getTime() === today.getTime();
             
-            // Rango provisional con hover
+            // Rango provisional con hover - solo para días del mes actual
             let isInHoverRange = false;
-            if (hoverDate && selectedStartDate && !selectedEndDate && modalTripType === 'round-trip') {
+            if (isCurrentMonth && hoverDate && selectedStartDate && !selectedEndDate && modalTripType === 'round-trip') {
               if (hoverDate > selectedStartDate) {
                 isInHoverRange = date > selectedStartDate && date <= hoverDate;
               } else {
@@ -2925,128 +2926,6 @@ function App() {
                   Alex, tu Consultor Personal de Viajes
                 </p>
               </div>
-              {/* Información del clima debajo del nombre en pantallas pequeñas */}
-              <div className="header-weather-info-mobile">
-                {/* Información del clima en el header - widget completo si hay weatherInfo */}
-                {weatherInfo && (
-                  <div className="header-weather-info">
-                    <div className="weather-header-container">
-                      <div className="weather-header-left">
-                        <Cloud className="weather-main-icon" />
-                        <div className="weather-header-left-content">
-                          <div className="weather-label">Clima Actual en</div>
-                          <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {weatherInfo.city}
-                            {formData.destination && (
-                              <button
-                                type="button"
-                                className="favorite-toggle-button"
-                                onClick={saveCurrentAsFavorite}
-                                title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  padding: '2px',
-                                  borderRadius: '4px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  transition: 'color 0.2s ease',
-                                  color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
-                                  lineHeight: 1
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
-                                }}
-                              >
-                                {isFavorite(formData.destination) ? (
-                                  <Heart size={16} fill="currentColor" />
-                                ) : (
-                                  <Heart size={16} />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="weather-header-divider"></div>
-                      <div className="weather-header-right">
-                        {weatherInfo.temperatura && (
-                          <div className="weather-detail-item">
-                            <Thermometer size={14} className="weather-detail-icon" />
-                            <span>{weatherInfo.temperatura}</span>
-                          </div>
-                        )}
-                        {weatherInfo.condiciones && (
-                          <div className="weather-detail-item">
-                            <Cloud size={14} className="weather-detail-icon" />
-                            <span>{weatherInfo.condiciones}</span>
-                          </div>
-                        )}
-                        {(weatherInfo.humedad || weatherInfo.viento) && (
-                          <div className="weather-detail-row">
-                            {weatherInfo.humedad && (
-                              <div className="weather-detail-item">
-                                <Droplets size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.humedad}</span>
-                              </div>
-                            )}
-                            {weatherInfo.viento && (
-                              <div className="weather-detail-item">
-                                <Wind size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.viento}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga */}
-                {!weatherInfo && formData.destination && !loading && (
-                  <div className="header-destination-simple">
-                    <span className="destination-name">{formData.destination}</span>
-                    <button
-                      type="button"
-                      className="favorite-toggle-button"
-                      onClick={saveCurrentAsFavorite}
-                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '2px',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'color 0.2s ease',
-                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
-                        lineHeight: 1,
-                        marginLeft: '8px'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
-                      }}
-                    >
-                      {isFavorite(formData.destination) ? (
-                        <Heart size={16} fill="currentColor" />
-                      ) : (
-                        <Heart size={16} />
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
             <div className="chat-header-center">
               {/* Información del clima en el header - widget completo si hay weatherInfo (solo en pantallas grandes) */}
@@ -3170,6 +3049,125 @@ function App() {
               )}
             </div>
             <div className="chat-header-right">
+              {/* Información del clima en móvil - al mismo nivel horizontal del header */}
+              <div className="header-weather-info-mobile">
+                {/* Información del clima en el header - widget completo si hay weatherInfo */}
+                {weatherInfo && (
+                  <div className="header-weather-info">
+                    <div className="weather-header-container">
+                      <div className="weather-header-left">
+                        <Cloud className="weather-main-icon" />
+                        <div className="weather-header-left-content">
+                          <div className="weather-label">CLIMA ACTUAL EN</div>
+                          <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {weatherInfo.city}
+                            {formData.destination && (
+                              <button
+                                type="button"
+                                className="favorite-toggle-button"
+                                onClick={saveCurrentAsFavorite}
+                                title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  borderRadius: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'color 0.2s ease',
+                                  color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                  lineHeight: 1
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                }}
+                              >
+                                {isFavorite(formData.destination) ? (
+                                  <Heart size={16} fill="currentColor" />
+                                ) : (
+                                  <Heart size={16} />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                          <div className="weather-header-right">
+                            <div className="weather-details-row">
+                              {weatherInfo.temperatura && (
+                                <div className="weather-detail-item">
+                                  <Thermometer size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.temperatura}</span>
+                                </div>
+                              )}
+                              {weatherInfo.condiciones && (
+                                <div className="weather-detail-item">
+                                  <Cloud size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.condiciones}</span>
+                                </div>
+                              )}
+                              {weatherInfo.humedad && (
+                                <div className="weather-detail-item">
+                                  <Droplets size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.humedad}</span>
+                                </div>
+                              )}
+                              {weatherInfo.viento && (
+                                <div className="weather-detail-item">
+                                  <Wind size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.viento}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga */}
+                {!weatherInfo && formData.destination && !loading && (
+                  <div className="header-destination-simple">
+                    <span className="destination-name">{formData.destination}</span>
+                    <button
+                      type="button"
+                      className="favorite-toggle-button"
+                      onClick={saveCurrentAsFavorite}
+                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.2s ease',
+                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                        lineHeight: 1,
+                        marginLeft: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                      }}
+                    >
+                      {isFavorite(formData.destination) ? (
+                        <Heart size={16} fill="currentColor" />
+                      ) : (
+                        <Heart size={16} />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 className={`side-panel-toggle ${showSidePanel ? 'active' : ''}`}
@@ -3204,6 +3202,16 @@ function App() {
           {/* Panel lateral colapsable */}
           <aside className={`side-panel ${showSidePanel ? 'open' : ''}`}>
             <div className="side-panel-content">
+              {/* Botón de cerrar para móvil */}
+              <button
+                type="button"
+                className="side-panel-close-btn"
+                onClick={() => setShowSidePanel(false)}
+                aria-label="Cerrar panel"
+              >
+                <X size={20} />
+              </button>
+              
               <div className="side-panel-section">
                 <h3 className="side-panel-title">Acciones Rápidas</h3>
                 <div className="quick-actions">
@@ -3309,9 +3317,19 @@ function App() {
                       if (typeof value === 'object' && value !== null) {
                         return null;
                       }
+                      
+                      // Mapeo de traducciones para los labels
+                      const labelTranslations = {
+                        'destination': 'Destino',
+                        'city': 'Ciudad',
+                        'country_code': 'Código de País'
+                      };
+                      
+                      const translatedLabel = labelTranslations[key] || key;
+                      
                       return (
                         <div key={key} className="realtime-info-compact-item">
-                          <span className="realtime-info-compact-label">{key}</span>
+                          <span className="realtime-info-compact-label">{translatedLabel}</span>
                           <span className="realtime-info-compact-value">{String(value)}</span>
                         </div>
                       );
