@@ -1424,13 +1424,6 @@ html, body {
   margin: 1.5rem 0;
 }
 
-.section-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
 .section-header {
   display: flex;
   align-items: center;
@@ -1438,6 +1431,7 @@ html, body {
   padding: 1rem 1.25rem;
   background: white;
   border-bottom: 1px solid #e2e8f0;
+  margin: 1rem -1.25rem 0 -1.25rem;
 }
 
 .section-title {
@@ -1486,6 +1480,7 @@ html, body {
   padding: 1.25rem;
   max-height: 400px;
   overflow-y: auto;
+  margin: 0 -1.25rem;
 }
 
 /* Cuando el contenedor padre está colapsado, ocultar scroll en section-content */
@@ -7313,10 +7308,6 @@ html, body {
   /* Optimización de secciones: reducir márgenes y padding */
   .result-sections {
     margin: 1rem 0;
-  }
-
-  .section-card {
-    border-radius: 10px;
   }
 
   .section-header {

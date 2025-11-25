@@ -3422,40 +3422,38 @@ function App() {
                                   </div>
                                 )}
 
-                                {/* Carrusel de secciones */}
-                                <div className="result-sections">
-                                  <div className="section-card">
-                                    <div className="section-header">
-                                      <div className="section-title">
-                                        {getSectionIcon(currentSectionKey)}
-                                        <span>{currentSectionKey}</span>
-                                      </div>
-                                      {hasMultipleSections && (
-                                        <div className="section-nav">
-                                          <button
-                                            className="section-nav-btn"
-                                            onClick={() => navigateCarousel('prev', resultId, responseToParse)}
-                                            aria-label="Sección anterior"
-                                          >
-                                            <ChevronLeft size={18} />
-                                          </button>
-                                          <span className="section-indicator">
-                                            {validIndex + 1} / {sectionKeys.length}
-                                          </span>
-                                          <button
-                                            className="section-nav-btn"
-                                            onClick={() => navigateCarousel('next', resultId, responseToParse)}
-                                            aria-label="Siguiente sección"
-                                          >
-                                            <ChevronRight size={18} />
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="section-content" ref={sectionScrollRef}>
-                                      {renderSectionContent(currentSectionContent, currentSectionKey)}
-                                    </div>
+                                {/* Header del carrusel */}
+                                <div className="section-header">
+                                  <div className="section-title">
+                                    {getSectionIcon(currentSectionKey)}
+                                    <span>{currentSectionKey}</span>
                                   </div>
+                                  {hasMultipleSections && (
+                                    <div className="section-nav">
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('prev', resultId, responseToParse)}
+                                        aria-label="Sección anterior"
+                                      >
+                                        <ChevronLeft size={18} />
+                                      </button>
+                                      <span className="section-indicator">
+                                        {validIndex + 1} / {sectionKeys.length}
+                                      </span>
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('next', resultId, responseToParse)}
+                                        aria-label="Siguiente sección"
+                                      >
+                                        <ChevronRight size={18} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Contenido del carrusel */}
+                                <div className="section-content" ref={sectionScrollRef}>
+                                  {renderSectionContent(currentSectionContent, currentSectionKey)}
                                 </div>
 
                                 {/* Texto después de las secciones */}
@@ -3566,40 +3564,38 @@ function App() {
                               </div>
                             )}
 
-                            {/* Carrusel de secciones */}
-                            <div className="result-sections">
-                              <div className="section-card">
-                                <div className="section-header">
-                                  <div className="section-title">
-                                    {getSectionIcon(currentSectionKey)}
-                                    <span>{currentSectionKey}</span>
-                                  </div>
-                                  {hasMultipleSections && (
-                                    <div className="section-nav">
-                                      <button
-                                        className="section-nav-btn"
-                                        onClick={() => navigateCarousel('prev', resultId, response)}
-                                        aria-label="Sección anterior"
-                                      >
-                                        <ChevronLeft size={18} />
-                                      </button>
-                                      <span className="section-indicator">
-                                        {validIndex + 1} / {sectionKeys.length}
-                                      </span>
-                                      <button
-                                        className="section-nav-btn"
-                                        onClick={() => navigateCarousel('next', resultId, response)}
-                                        aria-label="Siguiente sección"
-                                      >
-                                        <ChevronRight size={18} />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="section-content" ref={sectionScrollRef}>
-                                  {renderSectionContent(currentSectionContent, currentSectionKey)}
-                                </div>
+                            {/* Header del carrusel */}
+                            <div className="section-header">
+                              <div className="section-title">
+                                {getSectionIcon(currentSectionKey)}
+                                <span>{currentSectionKey}</span>
                               </div>
+                              {hasMultipleSections && (
+                                <div className="section-nav">
+                                  <button
+                                    className="section-nav-btn"
+                                    onClick={() => navigateCarousel('prev', resultId, response)}
+                                    aria-label="Sección anterior"
+                                  >
+                                    <ChevronLeft size={18} />
+                                  </button>
+                                  <span className="section-indicator">
+                                    {validIndex + 1} / {sectionKeys.length}
+                                  </span>
+                                  <button
+                                    className="section-nav-btn"
+                                    onClick={() => navigateCarousel('next', resultId, response)}
+                                    aria-label="Siguiente sección"
+                                  >
+                                    <ChevronRight size={18} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Contenido del carrusel */}
+                            <div className="section-content" ref={sectionScrollRef}>
+                              {renderSectionContent(currentSectionContent, currentSectionKey)}
                             </div>
 
                             {/* Texto después de las secciones */}
