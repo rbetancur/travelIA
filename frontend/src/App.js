@@ -72,6 +72,8 @@ function App() {
   const [hoverDate, setHoverDate] = useState(null);
   const [modalTripType, setModalTripType] = useState('round-trip'); // 'round-trip' o 'one-way'
   const [showTravelersModal, setShowTravelersModal] = useState(false);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showPreferenceModal, setShowPreferenceModal] = useState(false);
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
   const [weather, setWeather] = useState(null);
@@ -661,6 +663,8 @@ function App() {
     return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
   };
 
+
+
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -803,6 +807,29 @@ function App() {
     });
   };
 
+  // Funciones para manejar selección de mes y año
+  // Navegación por teclado
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Solo procesar si estamos en el modal de fechas
+      if (!showDateModal) return;
+
+      // Flechas izquierda/derecha: navegar meses
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (event.key === 'ArrowLeft') {
+          navigateMonth(-1);
+        } else {
+          navigateMonth(1);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showDateModal]);
+
   const renderCalendar = (monthOffset = 0) => {
     const displayDate = new Date(calendarMonth);
     displayDate.setMonth(displayDate.getMonth() + monthOffset);
@@ -814,7 +841,7 @@ function App() {
     today.setHours(0, 0, 0, 0);
     
     const days = [];
-    const weekDays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const weekDays = ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sá'];
 
     // Días del mes anterior
     const prevMonth = new Date(displayDate);
@@ -850,8 +877,15 @@ function App() {
       days.push({ day, date, isCurrentMonth: false });
     }
 
+    const monthName = displayDate.toLocaleDateString('es-ES', { month: 'long' });
+    const year = displayDate.getFullYear();
+    
     return (
       <div className="calendar-month">
+        <div className="calendar-month-header-inline">
+          <span className="month-name">{monthName}</span>
+          <span className="year"> {year}</span>
+        </div>
         <div className="calendar-weekdays">
           {weekDays.map(day => (
             <div key={day} className="calendar-weekday">{day}</div>
@@ -860,15 +894,16 @@ function App() {
         <div className="calendar-days">
           {days.map(({ day, date, isCurrentMonth }, index) => {
             const isPast = isDatePast(date);
-            const isStart = selectedStartDate && date.getTime() === selectedStartDate.getTime();
-            const isEnd = selectedEndDate && date.getTime() === selectedEndDate.getTime();
-            const isInRange = selectedStartDate && selectedEndDate && 
+            // Solo marcar como seleccionado si pertenece al mes actual
+            const isStart = isCurrentMonth && selectedStartDate && date.getTime() === selectedStartDate.getTime();
+            const isEnd = isCurrentMonth && selectedEndDate && date.getTime() === selectedEndDate.getTime();
+            const isInRange = isCurrentMonth && selectedStartDate && selectedEndDate && 
               isDateInRange(date, selectedStartDate, selectedEndDate);
             const isToday = date.getTime() === today.getTime();
             
-            // Rango provisional con hover
+            // Rango provisional con hover - solo para días del mes actual
             let isInHoverRange = false;
-            if (hoverDate && selectedStartDate && !selectedEndDate && modalTripType === 'round-trip') {
+            if (isCurrentMonth && hoverDate && selectedStartDate && !selectedEndDate && modalTripType === 'round-trip') {
               if (hoverDate > selectedStartDate) {
                 isInHoverRange = date > selectedStartDate && date <= hoverDate;
               } else {
@@ -937,6 +972,29 @@ function App() {
 
   const handleCloseTravelersModal = () => {
     setShowTravelersModal(false);
+  };
+
+  const handleOpenBudgetModal = () => {
+    setShowBudgetModal(true);
+  };
+
+  const handleCloseBudgetModal = () => {
+    setShowBudgetModal(false);
+  };
+
+  const handleOpenPreferenceModal = () => {
+    setShowPreferenceModal(true);
+  };
+
+  const handleClosePreferenceModal = () => {
+    setShowPreferenceModal(false);
+  };
+
+  const getPreferenceLabel = () => {
+    if (formData.preference === 'aventura') return 'Aventura';
+    if (formData.preference === 'relajación') return 'Relajación';
+    if (formData.preference === 'cultura') return 'Cultura';
+    return 'Selecciona una preferencia';
   };
 
   // Memoizar función de carga de destinos populares
@@ -1512,7 +1570,10 @@ function App() {
         clearTimeout(searchTimeoutRef.current);
       }
       
-      if (value.trim().length > 0) {
+      const trimmedValue = value.trim();
+      const valueLength = trimmedValue.length;
+      
+      if (valueLength > 0) {
         // Primero, filtrar destinos populares que coincidan (búsqueda rápida local)
         const filteredPopular = popularDestinations.filter(dest =>
           dest.toLowerCase().includes(value.toLowerCase())
@@ -1524,26 +1585,36 @@ function App() {
             setDestinationSuggestions(filteredPopular.slice(0, 5));
             setShowSuggestions(true);
           });
+        } else if (valueLength < 3) {
+          // Si no hay coincidencias y hay menos de 3 caracteres, ocultar sugerencias
+          startTransition(() => {
+            setDestinationSuggestions([]);
+            setShowSuggestions(false);
+          });
         }
         
-        // Luego, buscar con Gemini usando debounce (500ms)
-        searchTimeoutRef.current = setTimeout(async () => {
-          const searchResults = await searchDestinations(value);
-          if (searchResults.length > 0) {
-            // Combinar resultados de búsqueda con destinos populares filtrados
-            const combined = [...new Set([...filteredPopular, ...searchResults])].slice(0, 5);
-            startTransition(() => {
-              setDestinationSuggestions(combined);
-              setShowSuggestions(true);
-            });
-          } else if (filteredPopular.length === 0) {
-            // Si no hay resultados de ninguna fuente, ocultar sugerencias
-            startTransition(() => {
-              setDestinationSuggestions([]);
-              setShowSuggestions(false);
-            });
-          }
-        }, 500);
+        // Solo buscar con Gemini si hay al menos 3 caracteres
+        if (valueLength >= 3) {
+          // Buscar con Gemini usando debounce (500ms)
+          searchTimeoutRef.current = setTimeout(async () => {
+            const searchResults = await searchDestinations(value);
+            if (searchResults.length > 0) {
+              // Combinar resultados de búsqueda con destinos populares filtrados
+              const combined = [...new Set([...filteredPopular, ...searchResults])].slice(0, 5);
+              startTransition(() => {
+                setDestinationSuggestions(combined);
+                setShowSuggestions(true);
+              });
+            } else if (filteredPopular.length === 0) {
+              // Si no hay resultados de ninguna fuente, ocultar sugerencias
+              startTransition(() => {
+                setDestinationSuggestions([]);
+                setShowSuggestions(false);
+              });
+            }
+          }, 500);
+        }
+        // Si hay menos de 3 caracteres, no se consulta a Gemini (ya se mostraron populares o se ocultaron)
       } else {
         // Si no hay texto, mostrar los destinos populares (si están cargados)
         if (popularDestinations.length > 0) {
@@ -2142,8 +2213,11 @@ function App() {
                       // Cargar destinos populares si no están cargados
                       const destinations = await loadPopularDestinations();
                       
-                      // Si hay texto, buscar con Gemini y mostrar sugerencias
-                      if (formData.destination.trim().length > 0) {
+                      const trimmedDestination = formData.destination.trim();
+                      const destinationLength = trimmedDestination.length;
+                      
+                      // Si hay texto, mostrar sugerencias
+                      if (destinationLength > 0) {
                         // Filtrar destinos populares primero
                         const filtered = destinations.filter(dest =>
                           dest.toLowerCase().includes(formData.destination.toLowerCase())
@@ -2154,22 +2228,31 @@ function App() {
                             setDestinationSuggestions(filtered.slice(0, 5));
                             setShowSuggestions(true);
                           });
+                        } else if (destinationLength < 3) {
+                          // Si no hay coincidencias y hay menos de 3 caracteres, ocultar sugerencias
+                          startTransition(() => {
+                            setDestinationSuggestions([]);
+                            setShowSuggestions(false);
+                          });
                         }
                         
-                        // Buscar con Gemini
-                        const searchResults = await searchDestinations(formData.destination);
-                        if (searchResults.length > 0) {
-                          const combined = [...new Set([...filtered, ...searchResults])].slice(0, 5);
-                          startTransition(() => {
-                            setDestinationSuggestions(combined);
-                            setShowSuggestions(true);
-                          });
-                        } else if (filtered.length > 0) {
-                          startTransition(() => {
-                            setDestinationSuggestions(filtered.slice(0, 5));
-                            setShowSuggestions(true);
-                          });
+                        // Solo buscar con Gemini si hay al menos 3 caracteres
+                        if (destinationLength >= 3) {
+                          const searchResults = await searchDestinations(formData.destination);
+                          if (searchResults.length > 0) {
+                            const combined = [...new Set([...filtered, ...searchResults])].slice(0, 5);
+                            startTransition(() => {
+                              setDestinationSuggestions(combined);
+                              setShowSuggestions(true);
+                            });
+                          } else if (filtered.length > 0) {
+                            startTransition(() => {
+                              setDestinationSuggestions(filtered.slice(0, 5));
+                              setShowSuggestions(true);
+                            });
+                          }
                         }
+                        // Si hay menos de 3 caracteres, no se consulta a Gemini (ya se mostraron populares o se ocultaron)
                       } else {
                         // Si no hay texto, mostrar los destinos populares
                         if (destinations.length > 0) {
@@ -2388,37 +2471,87 @@ function App() {
                       </div>
 
                       <div className="calendar-navigation">
-                        <button 
-                          type="button"
-                          className="calendar-nav-button"
-                          onClick={() => navigateMonth(-1)}
-                        >
-                          <ChevronLeft size={24} />
-                        </button>
-                        <div className="calendar-months">
-                          <div className="calendar-month-header">
-                            {getMonthName(calendarMonth)}
-                          </div>
-                          <div className="calendar-month-header">
-                            {(() => {
-                              const nextMonth = new Date(calendarMonth);
-                              nextMonth.setMonth(nextMonth.getMonth() + 1);
-                              return getMonthName(nextMonth);
-                            })()}
-                          </div>
-                        </div>
-                        <button 
-                          type="button"
-                          className="calendar-nav-button"
-                          onClick={() => navigateMonth(1)}
-                        >
-                          <ChevronRight size={24} />
-                        </button>
+                        {(() => {
+                          // Verificar si el mes actual mostrado es el mes actual del sistema
+                          const today = new Date();
+                          const currentYear = today.getFullYear();
+                          const currentMonth = today.getMonth();
+                          const isAtCurrentMonth = calendarMonth.getFullYear() === currentYear && 
+                                                   calendarMonth.getMonth() === currentMonth;
+                          
+                          // Verificar si el segundo mes mostrado es el último disponible (mes actual + 11 meses)
+                          const secondMonth = new Date(calendarMonth);
+                          secondMonth.setMonth(secondMonth.getMonth() + 1);
+                          const lastAvailableMonth = new Date(currentYear, currentMonth + 11, 1);
+                          const isAtLastMonth = secondMonth.getFullYear() === lastAvailableMonth.getFullYear() &&
+                                                secondMonth.getMonth() === lastAvailableMonth.getMonth();
+                          
+                          return (
+                            <>
+                              {!isAtCurrentMonth && (
+                                <button 
+                                  type="button"
+                                  className="calendar-nav-button"
+                                  onClick={() => navigateMonth(-1)}
+                                >
+                                  <ChevronLeft size={24} />
+                                </button>
+                              )}
+                              {isAtCurrentMonth && <div style={{ width: '40px' }} />}
+                              <div className="calendar-months">
+                                <div className="calendar-month-header">
+                                  <span className="month-name">
+                                    {calendarMonth.toLocaleDateString('es-ES', { month: 'long' })}
+                                  </span>
+                                  <span className="year">
+                                    {' '}{calendarMonth.getFullYear()}
+                                  </span>
+                                </div>
+                                <div className="calendar-month-header">
+                                  {(() => {
+                                    const nextMonth = new Date(calendarMonth);
+                                    nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                    return (
+                                      <>
+                                        <span className="month-name">
+                                          {nextMonth.toLocaleDateString('es-ES', { month: 'long' })}
+                                        </span>
+                                        <span className="year">
+                                          {' '}{nextMonth.getFullYear()}
+                                        </span>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                              {!isAtLastMonth && (
+                                <button 
+                                  type="button"
+                                  className="calendar-nav-button"
+                                  onClick={() => navigateMonth(1)}
+                                >
+                                  <ChevronRight size={24} />
+                                </button>
+                              )}
+                              {isAtLastMonth && <div style={{ width: '40px' }} />}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="calendar-container">
                         {renderCalendar(0)}
                         {renderCalendar(1)}
+                        {renderCalendar(2)}
+                        {renderCalendar(3)}
+                        {renderCalendar(4)}
+                        {renderCalendar(5)}
+                        {renderCalendar(6)}
+                        {renderCalendar(7)}
+                        {renderCalendar(8)}
+                        {renderCalendar(9)}
+                        {renderCalendar(10)}
+                        {renderCalendar(11)}
                       </div>
 
                       <div className="date-modal-footer">
@@ -2465,7 +2598,7 @@ function App() {
                   <select
                     id="budget"
                     name="budget"
-                    className="form-input"
+                    className="form-input budget-select-desktop"
                     value={formData.budget}
                     onChange={handleInputChange}
                     required
@@ -2477,6 +2610,17 @@ function App() {
                     <option value="$2,500 - $5,000">$2,500 - $5,000</option>
                     <option value="Más de $5,000">Más de $5,000</option>
                   </select>
+                  <div className="budget-input-disabled" onClick={handleOpenBudgetModal}>
+                    <DollarSign className="budget-icon" size={20} />
+                    <input
+                      type="text"
+                      className="form-input budget-input-disabled-field"
+                      value={formData.budget || 'Selecciona un rango'}
+                      placeholder="Selecciona un rango"
+                      readOnly
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2590,11 +2734,142 @@ function App() {
                 </div>
               )}
 
+              {/* Modal de Presupuesto */}
+              {showBudgetModal && (
+                <div className="travelers-modal-overlay" onClick={handleCloseBudgetModal}>
+                  <div className="travelers-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="travelers-modal-header">
+                      <button 
+                        type="button" 
+                        className="travelers-modal-close"
+                        onClick={handleCloseBudgetModal}
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                    
+                    <div className="travelers-modal-content">
+                      <h3 className="travelers-modal-title">Seleccionar presupuesto</h3>
+                      
+                      <div className="budget-options">
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === 'Menos de $500' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: 'Menos de $500' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          Menos de $500
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === '$500 - $1,000' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: '$500 - $1,000' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          $500 - $1,000
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === '$1,000 - $2,500' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: '$1,000 - $2,500' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          $1,000 - $2,500
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === '$2,500 - $5,000' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: '$2,500 - $5,000' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          $2,500 - $5,000
+                        </button>
+                        <button
+                          type="button"
+                          className={`budget-option ${formData.budget === 'Más de $5,000' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, budget: 'Más de $5,000' }));
+                            handleCloseBudgetModal();
+                          }}
+                        >
+                          Más de $5,000
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de Preferencias */}
+              {showPreferenceModal && (
+                <div className="travelers-modal-overlay" onClick={handleClosePreferenceModal}>
+                  <div className="travelers-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="travelers-modal-header">
+                      <button 
+                        type="button" 
+                        className="travelers-modal-close"
+                        onClick={handleClosePreferenceModal}
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                    
+                    <div className="travelers-modal-content">
+                      <h3 className="travelers-modal-title">Seleccionar preferencia</h3>
+                      
+                      <div className="preference-options-modal">
+                        <button
+                          type="button"
+                          className={`preference-option-modal ${formData.preference === 'aventura' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, preference: 'aventura' }));
+                            handleClosePreferenceModal();
+                          }}
+                        >
+                          <Mountain size={24} style={{ marginRight: '12px' }} />
+                          <span>Aventura</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`preference-option-modal ${formData.preference === 'relajación' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, preference: 'relajación' }));
+                            handleClosePreferenceModal();
+                          }}
+                        >
+                          <Umbrella size={24} style={{ marginRight: '12px' }} />
+                          <span>Relajación</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`preference-option-modal ${formData.preference === 'cultura' ? 'active' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, preference: 'cultura' }));
+                            handleClosePreferenceModal();
+                          }}
+                        >
+                          <Landmark size={24} style={{ marginRight: '12px' }} />
+                          <span>Cultura</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label className="form-label">
                   ¿Prefieres aventura, relajación o cultura?
                 </label>
-                <div className="preference-buttons">
+                <div className="preference-buttons preference-buttons-desktop">
                   <button
                     type="button"
                     className={`preference-button ${formData.preference === 'aventura' ? 'active' : ''}`}
@@ -2620,24 +2895,42 @@ function App() {
                     Cultura
                   </button>
                 </div>
+                <div className="preference-input-disabled" onClick={handleOpenPreferenceModal}>
+                  {formData.preference === 'aventura' && <Mountain className="preference-icon" size={20} />}
+                  {formData.preference === 'relajación' && <Umbrella className="preference-icon" size={20} />}
+                  {formData.preference === 'cultura' && <Landmark className="preference-icon" size={20} />}
+                  {!formData.preference && <Landmark className="preference-icon" size={20} />}
+                  <input
+                    type="text"
+                    className="form-input preference-input-disabled-field"
+                    value={getPreferenceLabel()}
+                    placeholder="Selecciona una preferencia"
+                    readOnly
+                    required
+                  />
+                </div>
               </div>
 
-              <button 
-                type="submit" 
-                className="submit-button"
-                disabled={
-                  !formData.destination || 
-                  !formData.departureDate || 
-                  (tripType === 'closed' && !formData.returnDate) || 
-                  formData.adults < 1 ||
-                  !formData.budget || 
-                  !formData.preference
-                }
-              >
-                Continuar <ArrowRight size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
-              </button>
+              
             </form>
           </main>
+          <div className={`form-footer ${showDateModal || showTravelersModal || showBudgetModal || showPreferenceModal ? 'hidden' : ''}`}>
+                <button 
+                  type="button" 
+                  className="submit-button"
+                  onClick={handleFormSubmit}
+                  disabled={
+                    !formData.destination || 
+                    !formData.departureDate || 
+                    (tripType === 'closed' && !formData.returnDate) || 
+                    formData.adults < 1 ||
+                    !formData.budget || 
+                    !formData.preference
+                  }
+                >
+                  Continuar <ArrowRight size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
+                </button>
+              </div>
         </div>
       </div>
     );
@@ -2657,128 +2950,6 @@ function App() {
                 <p className="chat-subtitle">
                   Alex, tu Consultor Personal de Viajes
                 </p>
-              </div>
-              {/* Información del clima debajo del nombre en pantallas pequeñas */}
-              <div className="header-weather-info-mobile">
-                {/* Información del clima en el header - widget completo si hay weatherInfo */}
-                {weatherInfo && (
-                  <div className="header-weather-info">
-                    <div className="weather-header-container">
-                      <div className="weather-header-left">
-                        <Cloud className="weather-main-icon" />
-                        <div className="weather-header-left-content">
-                          <div className="weather-label">Clima Actual en</div>
-                          <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {weatherInfo.city}
-                            {formData.destination && (
-                              <button
-                                type="button"
-                                className="favorite-toggle-button"
-                                onClick={saveCurrentAsFavorite}
-                                title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  padding: '2px',
-                                  borderRadius: '4px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  transition: 'color 0.2s ease',
-                                  color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
-                                  lineHeight: 1
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
-                                }}
-                              >
-                                {isFavorite(formData.destination) ? (
-                                  <Heart size={16} fill="currentColor" />
-                                ) : (
-                                  <Heart size={16} />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="weather-header-divider"></div>
-                      <div className="weather-header-right">
-                        {weatherInfo.temperatura && (
-                          <div className="weather-detail-item">
-                            <Thermometer size={14} className="weather-detail-icon" />
-                            <span>{weatherInfo.temperatura}</span>
-                          </div>
-                        )}
-                        {weatherInfo.condiciones && (
-                          <div className="weather-detail-item">
-                            <Cloud size={14} className="weather-detail-icon" />
-                            <span>{weatherInfo.condiciones}</span>
-                          </div>
-                        )}
-                        {(weatherInfo.humedad || weatherInfo.viento) && (
-                          <div className="weather-detail-row">
-                            {weatherInfo.humedad && (
-                              <div className="weather-detail-item">
-                                <Droplets size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.humedad}</span>
-                              </div>
-                            )}
-                            {weatherInfo.viento && (
-                              <div className="weather-detail-item">
-                                <Wind size={14} className="weather-detail-icon" />
-                                <span>{weatherInfo.viento}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga */}
-                {!weatherInfo && formData.destination && !loading && (
-                  <div className="header-destination-simple">
-                    <span className="destination-name">{formData.destination}</span>
-                    <button
-                      type="button"
-                      className="favorite-toggle-button"
-                      onClick={saveCurrentAsFavorite}
-                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '2px',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'color 0.2s ease',
-                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
-                        lineHeight: 1,
-                        marginLeft: '8px'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
-                      }}
-                    >
-                      {isFavorite(formData.destination) ? (
-                        <Heart size={16} fill="currentColor" />
-                      ) : (
-                        <Heart size={16} />
-                      )}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
             <div className="chat-header-center">
@@ -2903,6 +3074,125 @@ function App() {
               )}
             </div>
             <div className="chat-header-right">
+              {/* Información del clima en móvil - al mismo nivel horizontal del header */}
+              <div className="header-weather-info-mobile">
+                {/* Información del clima en el header - widget completo si hay weatherInfo */}
+                {weatherInfo && (
+                  <div className="header-weather-info">
+                    <div className="weather-header-container">
+                      <div className="weather-header-left">
+                        <Cloud className="weather-main-icon" />
+                        <div className="weather-header-left-content">
+                          <div className="weather-label">CLIMA ACTUAL EN</div>
+                          <div className="weather-city" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {weatherInfo.city}
+                            {formData.destination && (
+                              <button
+                                type="button"
+                                className="favorite-toggle-button"
+                                onClick={saveCurrentAsFavorite}
+                                title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  borderRadius: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'color 0.2s ease',
+                                  color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                  lineHeight: 1
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                                }}
+                              >
+                                {isFavorite(formData.destination) ? (
+                                  <Heart size={16} fill="currentColor" />
+                                ) : (
+                                  <Heart size={16} />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                          <div className="weather-header-right">
+                            <div className="weather-details-row">
+                              {weatherInfo.temperatura && (
+                                <div className="weather-detail-item">
+                                  <Thermometer size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.temperatura}</span>
+                                </div>
+                              )}
+                              {weatherInfo.condiciones && (
+                                <div className="weather-detail-item">
+                                  <Cloud size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.condiciones}</span>
+                                </div>
+                              )}
+                              {weatherInfo.humedad && (
+                                <div className="weather-detail-item">
+                                  <Droplets size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.humedad}</span>
+                                </div>
+                              )}
+                              {weatherInfo.viento && (
+                                <div className="weather-detail-item">
+                                  <Wind size={14} className="weather-detail-icon" />
+                                  <span>{weatherInfo.viento}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Solo nombre y corazón si hay destino pero no hay información del clima - no mostrar mientras se carga */}
+                {!weatherInfo && formData.destination && !loading && (
+                  <div className="header-destination-simple">
+                    <span className="destination-name">{formData.destination}</span>
+                    <button
+                      type="button"
+                      className="favorite-toggle-button"
+                      onClick={saveCurrentAsFavorite}
+                      title={isFavorite(formData.destination) ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.2s ease',
+                        color: isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                        lineHeight: 1,
+                        marginLeft: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#dc2626' : '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = isFavorite(formData.destination) ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+                      }}
+                    >
+                      {isFavorite(formData.destination) ? (
+                        <Heart size={16} fill="currentColor" />
+                      ) : (
+                        <Heart size={16} />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 className={`side-panel-toggle ${showSidePanel ? 'active' : ''}`}
@@ -2937,6 +3227,16 @@ function App() {
           {/* Panel lateral colapsable */}
           <aside className={`side-panel ${showSidePanel ? 'open' : ''}`}>
             <div className="side-panel-content">
+              {/* Botón de cerrar para móvil */}
+              <button
+                type="button"
+                className="side-panel-close-btn"
+                onClick={() => setShowSidePanel(false)}
+                aria-label="Cerrar panel"
+              >
+                <X size={20} />
+              </button>
+              
               <div className="side-panel-section">
                 <h3 className="side-panel-title">Acciones Rápidas</h3>
                 <div className="quick-actions">
@@ -3042,9 +3342,19 @@ function App() {
                       if (typeof value === 'object' && value !== null) {
                         return null;
                       }
+                      
+                      // Mapeo de traducciones para los labels
+                      const labelTranslations = {
+                        'destination': 'Destino',
+                        'city': 'Ciudad',
+                        'country_code': 'Código de País'
+                      };
+                      
+                      const translatedLabel = labelTranslations[key] || key;
+                      
                       return (
                         <div key={key} className="realtime-info-compact-item">
-                          <span className="realtime-info-compact-label">{key}</span>
+                          <span className="realtime-info-compact-label">{translatedLabel}</span>
                           <span className="realtime-info-compact-value">{String(value)}</span>
                         </div>
                       );
@@ -3137,40 +3447,38 @@ function App() {
                                   </div>
                                 )}
 
-                                {/* Carrusel de secciones */}
-                                <div className="result-sections">
-                                  <div className="section-card">
-                                    <div className="section-header">
-                                      <div className="section-title">
-                                        {getSectionIcon(currentSectionKey)}
-                                        <span>{currentSectionKey}</span>
-                                      </div>
-                                      {hasMultipleSections && (
-                                        <div className="section-nav">
-                                          <button
-                                            className="section-nav-btn"
-                                            onClick={() => navigateCarousel('prev', resultId, responseToParse)}
-                                            aria-label="Sección anterior"
-                                          >
-                                            <ChevronLeft size={18} />
-                                          </button>
-                                          <span className="section-indicator">
-                                            {validIndex + 1} / {sectionKeys.length}
-                                          </span>
-                                          <button
-                                            className="section-nav-btn"
-                                            onClick={() => navigateCarousel('next', resultId, responseToParse)}
-                                            aria-label="Siguiente sección"
-                                          >
-                                            <ChevronRight size={18} />
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="section-content" ref={sectionScrollRef}>
-                                      {renderSectionContent(currentSectionContent, currentSectionKey)}
-                                    </div>
+                                {/* Header del carrusel */}
+                                <div className="section-header">
+                                  <div className="section-title">
+                                    {getSectionIcon(currentSectionKey)}
+                                    <span>{currentSectionKey}</span>
                                   </div>
+                                  {hasMultipleSections && (
+                                    <div className="section-nav">
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('prev', resultId, responseToParse)}
+                                        aria-label="Sección anterior"
+                                      >
+                                        <ChevronLeft size={18} />
+                                      </button>
+                                      <span className="section-indicator">
+                                        {validIndex + 1} / {sectionKeys.length}
+                                      </span>
+                                      <button
+                                        className="section-nav-btn"
+                                        onClick={() => navigateCarousel('next', resultId, responseToParse)}
+                                        aria-label="Siguiente sección"
+                                      >
+                                        <ChevronRight size={18} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Contenido del carrusel */}
+                                <div className="section-content" ref={sectionScrollRef}>
+                                  {renderSectionContent(currentSectionContent, currentSectionKey)}
                                 </div>
 
                                 {/* Texto después de las secciones */}
@@ -3281,40 +3589,38 @@ function App() {
                               </div>
                             )}
 
-                            {/* Carrusel de secciones */}
-                            <div className="result-sections">
-                              <div className="section-card">
-                                <div className="section-header">
-                                  <div className="section-title">
-                                    {getSectionIcon(currentSectionKey)}
-                                    <span>{currentSectionKey}</span>
-                                  </div>
-                                  {hasMultipleSections && (
-                                    <div className="section-nav">
-                                      <button
-                                        className="section-nav-btn"
-                                        onClick={() => navigateCarousel('prev', resultId, response)}
-                                        aria-label="Sección anterior"
-                                      >
-                                        <ChevronLeft size={18} />
-                                      </button>
-                                      <span className="section-indicator">
-                                        {validIndex + 1} / {sectionKeys.length}
-                                      </span>
-                                      <button
-                                        className="section-nav-btn"
-                                        onClick={() => navigateCarousel('next', resultId, response)}
-                                        aria-label="Siguiente sección"
-                                      >
-                                        <ChevronRight size={18} />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="section-content" ref={sectionScrollRef}>
-                                  {renderSectionContent(currentSectionContent, currentSectionKey)}
-                                </div>
+                            {/* Header del carrusel */}
+                            <div className="section-header">
+                              <div className="section-title">
+                                {getSectionIcon(currentSectionKey)}
+                                <span>{currentSectionKey}</span>
                               </div>
+                              {hasMultipleSections && (
+                                <div className="section-nav">
+                                  <button
+                                    className="section-nav-btn"
+                                    onClick={() => navigateCarousel('prev', resultId, response)}
+                                    aria-label="Sección anterior"
+                                  >
+                                    <ChevronLeft size={18} />
+                                  </button>
+                                  <span className="section-indicator">
+                                    {validIndex + 1} / {sectionKeys.length}
+                                  </span>
+                                  <button
+                                    className="section-nav-btn"
+                                    onClick={() => navigateCarousel('next', resultId, response)}
+                                    aria-label="Siguiente sección"
+                                  >
+                                    <ChevronRight size={18} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Contenido del carrusel */}
+                            <div className="section-content" ref={sectionScrollRef}>
+                              {renderSectionContent(currentSectionContent, currentSectionKey)}
                             </div>
 
                             {/* Texto después de las secciones */}

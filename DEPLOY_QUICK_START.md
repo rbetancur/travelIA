@@ -56,6 +56,72 @@ Tu app está online:
 
 ---
 
+---
+
+## 🔄 Sincronizar Nuevos Cambios
+
+Una vez configurado el despliegue inicial, sincronizar cambios es muy simple:
+
+### Proceso Automático (Recomendado)
+
+Tanto **Vercel** como **Railway** detectan automáticamente los cambios cuando haces push a GitHub:
+
+1. **Haz tus cambios localmente** en el código
+2. **Commit y push a GitHub:**
+   ```bash
+   git add .
+   git commit -m "Descripción de tus cambios"
+   git push origin develop  # o la rama que uses
+   ```
+3. **¡Listo!** Los despliegues se activan automáticamente:
+   - **Vercel** detecta cambios en `frontend/` y despliega el frontend
+   - **Railway** detecta cambios en `backend/` y despliega el backend
+
+### Verificar el Despliegue
+
+**En Vercel:**
+- Ve a tu proyecto en [vercel.com](https://vercel.com)
+- En la pestaña **"Deployments"** verás el nuevo despliegue en progreso
+- Espera 2-3 minutos para que termine
+- El despliegue más reciente se convierte automáticamente en producción
+
+**En Railway:**
+- Ve a tu proyecto en [railway.app](https://railway.app)
+- En la pestaña **"Deployments"** verás el nuevo despliegue
+- Espera 1-2 minutos para que termine
+- Los cambios se aplican automáticamente
+
+### Despliegue Manual (Si es necesario)
+
+Si necesitas forzar un despliegue manual:
+
+**Vercel:**
+- Dashboard → Tu proyecto → **"Deployments"** → **"Redeploy"** (botón en el último despliegue)
+
+**Railway:**
+- Dashboard → Tu servicio → **"Deployments"** → **"Redeploy"**
+
+### Cambios en Variables de Entorno
+
+Si cambias variables de entorno:
+
+**Vercel:**
+- Settings → Environment Variables → Edita y guarda
+- Los cambios requieren un nuevo despliegue (se activa automáticamente)
+
+**Railway:**
+- Variables → Edita y guarda
+- Railway reinicia automáticamente el servicio
+
+### Notas Importantes
+
+- ✅ Los despliegues son **automáticos** cuando haces push a la rama configurada
+- ✅ No necesitas hacer nada manual después del push
+- ✅ Los logs de despliegue están disponibles en ambos dashboards
+- ⚠️ Si cambias la rama de producción, actualiza la configuración en Vercel/Railway
+
+---
+
 ## 📚 Guía Completa
 
 Para más detalles, consulta [DEPLOYMENT.md](./DEPLOYMENT.md)
