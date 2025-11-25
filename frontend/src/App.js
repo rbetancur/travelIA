@@ -1570,7 +1570,10 @@ function App() {
         clearTimeout(searchTimeoutRef.current);
       }
       
-      if (value.trim().length > 0) {
+      const trimmedValue = value.trim();
+      const valueLength = trimmedValue.length;
+      
+      if (valueLength > 0) {
         // Primero, filtrar destinos populares que coincidan (búsqueda rápida local)
         const filteredPopular = popularDestinations.filter(dest =>
           dest.toLowerCase().includes(value.toLowerCase())
@@ -1582,26 +1585,36 @@ function App() {
             setDestinationSuggestions(filteredPopular.slice(0, 5));
             setShowSuggestions(true);
           });
+        } else if (valueLength < 3) {
+          // Si no hay coincidencias y hay menos de 3 caracteres, ocultar sugerencias
+          startTransition(() => {
+            setDestinationSuggestions([]);
+            setShowSuggestions(false);
+          });
         }
         
-        // Luego, buscar con Gemini usando debounce (500ms)
-        searchTimeoutRef.current = setTimeout(async () => {
-          const searchResults = await searchDestinations(value);
-          if (searchResults.length > 0) {
-            // Combinar resultados de búsqueda con destinos populares filtrados
-            const combined = [...new Set([...filteredPopular, ...searchResults])].slice(0, 5);
-            startTransition(() => {
-              setDestinationSuggestions(combined);
-              setShowSuggestions(true);
-            });
-          } else if (filteredPopular.length === 0) {
-            // Si no hay resultados de ninguna fuente, ocultar sugerencias
-            startTransition(() => {
-              setDestinationSuggestions([]);
-              setShowSuggestions(false);
-            });
-          }
-        }, 500);
+        // Solo buscar con Gemini si hay al menos 3 caracteres
+        if (valueLength >= 3) {
+          // Buscar con Gemini usando debounce (500ms)
+          searchTimeoutRef.current = setTimeout(async () => {
+            const searchResults = await searchDestinations(value);
+            if (searchResults.length > 0) {
+              // Combinar resultados de búsqueda con destinos populares filtrados
+              const combined = [...new Set([...filteredPopular, ...searchResults])].slice(0, 5);
+              startTransition(() => {
+                setDestinationSuggestions(combined);
+                setShowSuggestions(true);
+              });
+            } else if (filteredPopular.length === 0) {
+              // Si no hay resultados de ninguna fuente, ocultar sugerencias
+              startTransition(() => {
+                setDestinationSuggestions([]);
+                setShowSuggestions(false);
+              });
+            }
+          }, 500);
+        }
+        // Si hay menos de 3 caracteres, no se consulta a Gemini (ya se mostraron populares o se ocultaron)
       } else {
         // Si no hay texto, mostrar los destinos populares (si están cargados)
         if (popularDestinations.length > 0) {
@@ -2200,8 +2213,11 @@ function App() {
                       // Cargar destinos populares si no están cargados
                       const destinations = await loadPopularDestinations();
                       
-                      // Si hay texto, buscar con Gemini y mostrar sugerencias
-                      if (formData.destination.trim().length > 0) {
+                      const trimmedDestination = formData.destination.trim();
+                      const destinationLength = trimmedDestination.length;
+                      
+                      // Si hay texto, mostrar sugerencias
+                      if (destinationLength > 0) {
                         // Filtrar destinos populares primero
                         const filtered = destinations.filter(dest =>
                           dest.toLowerCase().includes(formData.destination.toLowerCase())
@@ -2212,22 +2228,31 @@ function App() {
                             setDestinationSuggestions(filtered.slice(0, 5));
                             setShowSuggestions(true);
                           });
+                        } else if (destinationLength < 3) {
+                          // Si no hay coincidencias y hay menos de 3 caracteres, ocultar sugerencias
+                          startTransition(() => {
+                            setDestinationSuggestions([]);
+                            setShowSuggestions(false);
+                          });
                         }
                         
-                        // Buscar con Gemini
-                        const searchResults = await searchDestinations(formData.destination);
-                        if (searchResults.length > 0) {
-                          const combined = [...new Set([...filtered, ...searchResults])].slice(0, 5);
-                          startTransition(() => {
-                            setDestinationSuggestions(combined);
-                            setShowSuggestions(true);
-                          });
-                        } else if (filtered.length > 0) {
-                          startTransition(() => {
-                            setDestinationSuggestions(filtered.slice(0, 5));
-                            setShowSuggestions(true);
-                          });
+                        // Solo buscar con Gemini si hay al menos 3 caracteres
+                        if (destinationLength >= 3) {
+                          const searchResults = await searchDestinations(formData.destination);
+                          if (searchResults.length > 0) {
+                            const combined = [...new Set([...filtered, ...searchResults])].slice(0, 5);
+                            startTransition(() => {
+                              setDestinationSuggestions(combined);
+                              setShowSuggestions(true);
+                            });
+                          } else if (filtered.length > 0) {
+                            startTransition(() => {
+                              setDestinationSuggestions(filtered.slice(0, 5));
+                              setShowSuggestions(true);
+                            });
+                          }
                         }
+                        // Si hay menos de 3 caracteres, no se consulta a Gemini (ya se mostraron populares o se ocultaron)
                       } else {
                         // Si no hay texto, mostrar los destinos populares
                         if (destinations.length > 0) {
