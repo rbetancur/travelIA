@@ -3091,6 +3091,12 @@ html, body {
 }
 
 /* Date Modal */
+/* Z-INDEX HIERARCHY:
+ * Modales: 99999-100000 (overlay: 99999, modal content: 100000)
+ * Fixed elements (footer, header): 100-200
+ * Floating buttons: 1000
+ * Regular content: 1-10
+ */
 .date-modal-overlay {
   position: fixed;
   top: 0;
@@ -3596,6 +3602,7 @@ html, body {
 }
 
 /* Travelers Modal */
+/* Z-INDEX: 99999 (overlay), 100000 (modal content) - Ver jerarquía en Date Modal */
 .travelers-modal-overlay {
   position: fixed;
   top: 0;
@@ -3964,6 +3971,7 @@ html, body {
     width: 100%;
     box-sizing: border-box;
     pointer-events: auto;
+    transition: opacity 0.2s ease, transform 0.2s ease;
   }
 
   .form-footer .submit-button {
@@ -3978,6 +3986,14 @@ html, body {
     background: #1e40af;
     box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     transform: translateY(-1px);
+  }
+
+  /* Ocultar footer cuando un modal está abierto */
+  .form-footer.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: opacity 0.2s ease, transform 0.2s ease;
   }
 
   .survey-title {
@@ -6637,6 +6653,14 @@ html, body {
     width: 100%;
     box-sizing: border-box;
     pointer-events: auto;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  /* Ocultar footer cuando un modal está abierto */
+  .form-footer.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
   }
 
   .form-footer .submit-button {

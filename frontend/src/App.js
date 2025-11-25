@@ -2888,7 +2888,7 @@ function App() {
               
             </form>
           </main>
-          <div className="form-footer">
+          <div className={`form-footer ${showDateModal || showTravelersModal || showBudgetModal || showPreferenceModal ? 'hidden' : ''}`}>
                 <button 
                   type="button" 
                   className="submit-button"
