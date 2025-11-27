@@ -2183,7 +2183,7 @@ function App() {
           <header className="header">
             <h1 className="title">ViajeIA</h1>
             <p className="subtitle">
-              Alex, tu Consultor Personal de Viajes{' '}
+              Mary, tu Consultora Personal de Viajes{' '}
               <Luggage size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }} />
               <Plane size={18} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '2px' }} />
             </p>
@@ -2948,7 +2948,7 @@ function App() {
               <div className="chat-header-title-section">
                 <h1 className="chat-title">ViajeIA</h1>
                 <p className="chat-subtitle">
-                  Alex, tu Consultor Personal de Viajes
+                  Mary, tu Consultora Personal de Viajes
                 </p>
               </div>
             </div>
@@ -3376,12 +3376,12 @@ function App() {
                   </div>
                   <div className="message-content">
                     <div className="message-text">
-                      <p>¡Hola! Soy Alex, tu Consultor Personal de Viajes. 👋</p>
-                      <p>Puedo ayudarte a planificar tu próximo viaje. Solo dime:</p>
+                      <p>¡Hola! Soy Mary, tu Consultora Personal de Viajes. ✨</p>
+                      <p>Puedo ayudarte a diseñar experiencias de viaje excepcionales. Comparte conmigo:</p>
                       <ul>
-                        <li>¿A dónde quieres viajar?</li>
-                        <li>¿Cuál es tu presupuesto?</li>
-                        <li>¿Qué tipo de actividades te interesan?</li>
+                        <li>¿A qué destino te gustaría viajar?</li>
+                        <li>¿Qué tipo de experiencias buscas?</li>
+                        <li>¿Cuáles son tus preferencias de alojamiento y gastronomía?</li>
                       </ul>
                     </div>
                   </div>
@@ -4102,7 +4102,7 @@ function App() {
                         <div key={index} className={`history-message history-message-${msg.role}`}>
                           <div className="history-message-header">
                             <span className="history-message-role">
-                              {msg.role === 'user' ? '👤 Tú' : '🤖 Alex'}
+                              {msg.role === 'user' ? '👤 Tú' : '✨ Mary'}
                             </span>
                             {msg.timestamp && (
                               <span className="history-message-time">

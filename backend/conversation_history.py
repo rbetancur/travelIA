@@ -5,6 +5,7 @@ Permite mantener contexto entre múltiples preguntas del usuario.
 from typing import List, Dict, Optional
 from datetime import datetime
 import uuid
+from security import sanitize_conversation_history
 
 
 class ConversationMessage:
@@ -96,26 +97,28 @@ class ConversationHistory:
     def get_conversation_context(self, session_id: str, limit: Optional[int] = None) -> str:
         """
         Obtiene el contexto de la conversación como texto formateado
-        para incluir en el prompt
+        para incluir en el prompt. Sanitiza el historial para prevenir prompt injection.
         
         Args:
             session_id: ID de la sesión
             limit: Número máximo de mensajes a incluir (None = todos)
         
         Returns:
-            String con el contexto formateado
+            String con el contexto formateado y sanitizado
         """
         messages = self.get_history(session_id, limit)
         
         if not messages:
             return ""
         
-        context_parts = []
-        for msg in messages:
-            role_name = "Usuario" if msg['role'] == 'user' else "Alex"
-            context_parts.append(f"{role_name}: {msg['content']}")
+        # Sanitizar el historial usando la función de seguridad
+        sanitized_context = sanitize_conversation_history(
+            messages,
+            max_message_length=1000,
+            max_total_length=5000
+        )
         
-        return "\n".join(context_parts)
+        return sanitized_context
     
     def extract_last_destination(self, session_id: str) -> Optional[str]:
         """

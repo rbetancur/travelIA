@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
-from pydantic import BaseModel
+from fastapi.responses import Response, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, field_validator, ValidationError
 from typing import Optional, List, Dict, Any
 import google.generativeai as genai
 import os
@@ -14,6 +15,7 @@ from realtime_info import RealtimeInfoService
 from conversation_history import conversation_history
 from destination_detector import detect_destination_change, interpret_confirmation_response
 from pdf_generator import create_pdf
+from validators import validate_question, validate_destination, validate_search_query, validate_session_id
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -131,10 +133,87 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Maneja errores de validación de Pydantic y retorna respuestas seguras.
+    No expone detalles internos que podrían ayudar a atacantes.
+    """
+    errors = exc.errors()
+    error_messages = []
+    
+    for error in errors:
+        field = ".".join(str(loc) for loc in error.get("loc", []))
+        msg = error.get("msg", "Error de validación")
+        
+        # Detectar si es un intento de prompt injection
+        if "contenido no permitido" in msg.lower() or "prompt injection" in msg.lower():
+            print(f"⚠️ [SECURITY] Intento de prompt injection detectado en campo '{field}'")
+            error_messages.append("La entrada contiene contenido no permitido")
+        else:
+            # Mensaje genérico para otros errores de validación
+            if "longitud" in msg.lower() or "length" in msg.lower():
+                error_messages.append(f"El campo '{field}' tiene una longitud inválida")
+            elif "formato" in msg.lower() or "format" in msg.lower():
+                error_messages.append(f"El campo '{field}' tiene un formato inválido")
+            else:
+                error_messages.append(f"Error en el campo '{field}'")
+    
+    # Retornar mensaje genérico sin exponer detalles
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": error_messages[0] if error_messages else "Error de validación en los datos enviados"
+        }
+    )
+
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(request: Request, exc: ValidationError):
+    """
+    Maneja errores de validación de Pydantic en modelos.
+    """
+    errors = exc.errors()
+    error_messages = []
+    
+    for error in errors:
+        field = ".".join(str(loc) for loc in error.get("loc", []))
+        msg = error.get("msg", "Error de validación")
+        
+        # Detectar si es un intento de prompt injection
+        if "contenido no permitido" in msg.lower():
+            print(f"⚠️ [SECURITY] Intento de prompt injection detectado en campo '{field}'")
+            error_messages.append("La entrada contiene contenido no permitido")
+        else:
+            error_messages.append(f"Error en el campo '{field}': {msg}")
+    
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": error_messages[0] if error_messages else "Error de validación en los datos enviados"
+        }
+    )
+
+
 class TravelQuery(BaseModel):
     question: str
     destination: Optional[str] = None  # Destino del formulario (formato: "Ciudad, País")
     session_id: Optional[str] = None  # ID de sesión para mantener historial
+    
+    @field_validator('question')
+    @classmethod
+    def validate_question_field(cls, v: str) -> str:
+        return validate_question(v)
+    
+    @field_validator('destination')
+    @classmethod
+    def validate_destination_field(cls, v: Optional[str]) -> Optional[str]:
+        return validate_destination(v)
+    
+    @field_validator('session_id')
+    @classmethod
+    def validate_session_id_field(cls, v: Optional[str]) -> Optional[str]:
+        return validate_session_id(v)
 
 
 class TravelResponse(BaseModel):
@@ -154,6 +233,11 @@ class DestinationsResponse(BaseModel):
 
 class DestinationSearchQuery(BaseModel):
     query: str
+    
+    @field_validator('query')
+    @classmethod
+    def validate_query_field(cls, v: str) -> str:
+        return validate_search_query(v)
 
 
 class DestinationConfirmation(BaseModel):
@@ -161,13 +245,29 @@ class DestinationConfirmation(BaseModel):
     new_destination: str
     confirmed: bool
     original_question: Optional[str] = None  # Para re-procesar si se confirma
-
-
-class DestinationConfirmation(BaseModel):
-    session_id: str
-    new_destination: str
-    confirmed: bool
-    original_question: Optional[str] = None  # Para re-procesar si se confirma
+    
+    @field_validator('session_id')
+    @classmethod
+    def validate_session_id_field(cls, v: str) -> str:
+        result = validate_session_id(v)
+        if result is None:
+            raise ValueError("El session ID es requerido")
+        return result
+    
+    @field_validator('new_destination')
+    @classmethod
+    def validate_new_destination_field(cls, v: str) -> str:
+        result = validate_destination(v)
+        if result is None:
+            raise ValueError("El destino es requerido")
+        return result
+    
+    @field_validator('original_question')
+    @classmethod
+    def validate_original_question_field(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return validate_question(v)
 
 
 @app.get("/")
@@ -1126,10 +1226,26 @@ def clear_country_code_cache():
 
 class RealtimeInfoQuery(BaseModel):
     destination: str  # Destino en formato "Ciudad, País"
+    
+    @field_validator('destination')
+    @classmethod
+    def validate_destination_field(cls, v: str) -> str:
+        result = validate_destination(v)
+        if result is None:
+            raise ValueError("El destino es requerido")
+        return result
 
 
 class ConversationHistoryRequest(BaseModel):
     session_id: str
+    
+    @field_validator('session_id')
+    @classmethod
+    def validate_session_id_field(cls, v: str) -> str:
+        result = validate_session_id(v)
+        if result is None:
+            raise ValueError("El session ID es requerido")
+        return result
 
 
 class ConversationHistoryResponse(BaseModel):

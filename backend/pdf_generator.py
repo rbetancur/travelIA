@@ -228,7 +228,7 @@ def create_pdf(
     )
     
     # Header con logo y título
-    header_text = f"<b>ViajeIA</b><br/><font size='12' color='#6b7280'>Tu Asistente Personal de Viajes</font>"
+    header_text = f"<b>ViajeIA</b><br/><font size='12' color='#6b7280'>Tu Consultora Personal de Viajes</font>"
     story.append(Paragraph(header_text, title_style))
     story.append(Spacer(1, 0.3*inch))
     
@@ -321,7 +321,7 @@ def create_pdf(
             role = msg.get('role', '')
             content = msg.get('content', '')
             if content:
-                role_text = "Usuario" if role == 'user' else "Alex"
+                role_text = "Usuario" if role == 'user' else "Mary"
                 escaped_content = escape_xml_text(content)
                 # Limitar longitud y agregar puntos suspensivos si es necesario
                 if len(escaped_content) > 500:
@@ -331,7 +331,7 @@ def create_pdf(
     
     # Footer
     story.append(Spacer(1, 0.3*inch))
-    footer_text = "<font size='9' color='#9ca3af'>Generado por ViajeIA - Tu Asistente Personal de Viajes</font>"
+    footer_text = "<font size='9' color='#9ca3af'>Generado por ViajeIA - Tu Consultora Personal de Viajes</font>"
     story.append(Paragraph(footer_text, ParagraphStyle('Footer', parent=styles['Normal'], alignment=TA_CENTER)))
     
     # Construir PDF
