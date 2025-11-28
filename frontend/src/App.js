@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, useTransition, startTransition } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react';
 import axios from 'axios';
 import { 
   Luggage, 
@@ -28,14 +28,11 @@ import {
   Thermometer,
   Droplets,
   Wind,
-  Image,
   Clock,
-  Globe,
   Radio,
   History,
   MessageSquare,
   Download,
-  FileText,
   Bookmark,
   Trash2,
   Heart
@@ -58,8 +55,8 @@ function App() {
   });
   const [destinationSuggestions, setDestinationSuggestions] = useState([]);
   const [popularDestinations, setPopularDestinations] = useState([]);
-  const [loadingDestinations, setLoadingDestinations] = useState(false);
-  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [, setLoadingDestinations] = useState(false);
+  const [, setLoadingSearch] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [destinationError, setDestinationError] = useState('');
   const searchTimeoutRef = useRef(null);
@@ -80,16 +77,16 @@ function App() {
   const [photos, setPhotos] = useState(null);
   const [loading, setLoading] = useState(false);
   const [realtimeInfo, setRealtimeInfo] = useState(null);
-  const [loadingRealtimeInfo, setLoadingRealtimeInfo] = useState(false);
+  const [, setLoadingRealtimeInfo] = useState(false);
   const [showRealtimePanel, setShowRealtimePanel] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0); // Mantener para compatibilidad con código legacy
   const [carouselIndices, setCarouselIndices] = useState({}); // Índices por mensaje: { 'result-0': 0, 'result-1': 2, ... }
-  const [carouselDirection, setCarouselDirection] = useState('right');
+  const [, setCarouselDirection] = useState('right');
   const contentScrollRef = useRef(null);
   const sectionScrollRefs = useRef({}); // Refs para cada sección de cada mensaje
   const lastFormDataRef = useRef(null);
   const lastTripTypeRef = useRef(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [sessionId, setSessionId] = useState(null);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -125,7 +122,7 @@ function App() {
         // Eliminar líneas que son solo símbolos técnicos
         if (/^[`{}[\],:;]+$/.test(line)) return false;
         // Eliminar líneas que empiezan con caracteres técnicos comunes
-        if (/^[`{}\]\[,;:]/.test(line) && line.length < 10) return false;
+        if (/^[`{}[\]/,;:]/.test(line) && line.length < 10) return false;
         return true;
       });
     
@@ -206,7 +203,7 @@ function App() {
               const afterMatch = trimmedLine.substring(match.index + match[0].length).trim();
               if (afterMatch) {
                 let content = afterMatch.replace(/^\([^)]+\)\s*/, '');
-                content = content.replace(/^[|:\-]\s*/, '').trim();
+                content = content.replace(/^[|:-]\s*/, '').trim();
                 if (content) {
                   currentContent.push(content);
                 }
@@ -365,15 +362,41 @@ function App() {
     return { city, ...weatherData };
   }, []);
 
-  // Memoizar sugerencias filtradas de destinos populares
-  const filteredPopularDestinations = useMemo(() => {
-    if (!formData.destination || formData.destination.trim().length === 0) {
-      return popularDestinations.slice(0, 5);
+  // Memoizar función de carga de destinos populares
+  const loadPopularDestinations = useCallback(async () => {
+    // Si ya tenemos destinos populares cargados, no volver a cargar
+    if (popularDestinations.length > 0) {
+      return popularDestinations;
     }
-    return popularDestinations.filter(dest =>
-      dest.toLowerCase().includes(formData.destination.toLowerCase())
-    ).slice(0, 5);
-  }, [formData.destination, popularDestinations]);
+
+    setLoadingDestinations(true);
+    try {
+      const result = await axios.get(`${API_URL}/api/destinations/popular`);
+      if (result.data && result.data.destinations) {
+        startTransition(() => {
+          setPopularDestinations(result.data.destinations);
+        });
+        return result.data.destinations;
+      }
+    } catch (error) {
+      console.error('Error al cargar destinos populares:', error);
+      // En caso de error, usar destinos por defecto
+      const defaultDestinations = [
+        'París, Francia',
+        'Tokio, Japón',
+        'Nueva York, Estados Unidos',
+        'Bali, Indonesia',
+        'Barcelona, España'
+      ];
+      startTransition(() => {
+        setPopularDestinations(defaultDestinations);
+      });
+      return defaultDestinations;
+    } finally {
+      setLoadingDestinations(false);
+    }
+    return [];
+  }, [popularDestinations]);
 
   // Memoizar el parseo de la respuesta para evitar re-parsear en cada render
   // IMPORTANTE: Estos hooks deben estar antes de cualquier return condicional
@@ -386,7 +409,7 @@ function App() {
   const weatherInfo = useMemo(() => {
     if (!weather) return null;
     return parseWeatherInfo(weather);
-  }, [weather]);
+  }, [weather, parseWeatherInfo]);
 
   // Preload de destinos populares al montar el componente
   useEffect(() => {
@@ -395,7 +418,7 @@ function App() {
     loadPopularDestinations().catch(error => {
       console.error('Error al precargar destinos populares:', error);
     });
-  }, []);
+  }, [loadPopularDestinations]);
 
   // Limpiar timeout al desmontar el componente
   useEffect(() => {
@@ -430,6 +453,63 @@ function App() {
     }
   }, []);
 
+  // Función para navegar el carrusel (memoizada)
+  const navigateCarousel = useCallback((direction, resultId = null, currentContent = null) => {
+    // Si se proporciona resultId y currentContent, usar el contenido específico del mensaje
+    if (resultId && currentContent) {
+      const parsed = parseResponseSections(currentContent);
+      if (!parsed || !parsed.sections) return;
+      
+      const sectionKeys = Object.keys(parsed.sections);
+      if (sectionKeys.length === 0) return;
+      
+      setCarouselDirection(direction === 'next' ? 'right' : 'left');
+      
+      setCarouselIndices((prevIndices) => {
+        const currentIndex = prevIndices[resultId] || 0;
+        let newIndex;
+        if (direction === 'next') {
+          newIndex = (currentIndex + 1) % sectionKeys.length;
+        } else {
+          newIndex = (currentIndex - 1 + sectionKeys.length) % sectionKeys.length;
+        }
+        
+        // Hacer scroll al inicio cuando se cambia de página
+        setTimeout(() => {
+          const scrollRef = sectionScrollRefs.current[resultId];
+          if (scrollRef && scrollRef.current) {
+            scrollRef.current.scrollTop = 0;
+          }
+        }, 0);
+        
+        return {
+          ...prevIndices,
+          [resultId]: newIndex
+        };
+      });
+      return;
+    }
+    
+    // Código legacy para compatibilidad
+    if (!response) return;
+    
+    const parsed = parseResponseSections(response);
+    if (!parsed || !parsed.sections) return;
+
+    const sectionKeys = Object.keys(parsed.sections);
+    if (sectionKeys.length === 0) return;
+
+    setCarouselDirection(direction === 'next' ? 'right' : 'left');
+    
+    setCarouselIndex((prevIndex) => {
+      if (direction === 'next') {
+        return (prevIndex + 1) % sectionKeys.length;
+      } else {
+        return (prevIndex - 1 + sectionKeys.length) % sectionKeys.length;
+      }
+    });
+  }, [response, parseResponseSections]);
+
   // Resetear índice del carrusel cuando cambia la respuesta
   useEffect(() => {
     if (response) {
@@ -450,7 +530,7 @@ function App() {
         setCarouselIndex(0);
       }
     }
-  }, [response]);
+  }, [response, carouselIndex, parseResponseSections]);
 
   // Actualizar indicadores de scroll cuando cambia el contenido o el índice
   useEffect(() => {
@@ -475,7 +555,7 @@ function App() {
         window.removeEventListener('resize', handleScroll);
       };
     }
-  }, [response, carouselIndex]);
+  }, [response, carouselIndex, updateScrollIndicators]);
 
   // Scroll automático al final del chat cuando hay nuevos mensajes
   useEffect(() => {
@@ -520,7 +600,7 @@ function App() {
         window.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [response, carouselIndex, showForm]);
+  }, [response, carouselIndex, showForm, navigateCarousel, parseResponseSections]);
 
   // Memoizar cálculo de días
   const calculateDays = useCallback((departure, returnDate) => {
@@ -616,37 +696,6 @@ function App() {
     return date;
   };
 
-  const toggleTripType = () => {
-    if (tripType === 'closed') {
-      setTripType('open');
-      // Limpiar fecha de regreso para viaje abierto
-      setFormData(prev => ({
-        ...prev,
-        returnDate: ''
-      }));
-    } else {
-      setTripType('closed');
-      // Si hay fecha de ida, calcular fecha de regreso (7 días por defecto)
-      if (formData.departureDate) {
-        const departure = parseLocalDateString(formData.departureDate);
-        if (departure) {
-          const returnDate = new Date(departure);
-          returnDate.setDate(returnDate.getDate() + 7);
-          setFormData(prev => ({
-            ...prev,
-            returnDate: formatDateToLocalString(returnDate)
-          }));
-        }
-      }
-    }
-  };
-
-  const getTodayDate = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return formatDateToLocalString(today);
-  };
-
   // Funciones para el calendario
   const formatDateForDisplay = (dateString) => {
     if (!dateString) return '';
@@ -657,10 +706,6 @@ function App() {
       month: 'short',
       year: 'numeric'
     });
-  };
-
-  const getMonthName = (date) => {
-    return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
   };
 
 
@@ -996,42 +1041,6 @@ function App() {
     if (formData.preference === 'cultura') return 'Cultura';
     return 'Selecciona una preferencia';
   };
-
-  // Memoizar función de carga de destinos populares
-  const loadPopularDestinations = useCallback(async () => {
-    // Si ya tenemos destinos populares cargados, no volver a cargar
-    if (popularDestinations.length > 0) {
-      return popularDestinations;
-    }
-
-    setLoadingDestinations(true);
-    try {
-      const result = await axios.get(`${API_URL}/api/destinations/popular`);
-      if (result.data && result.data.destinations) {
-        startTransition(() => {
-          setPopularDestinations(result.data.destinations);
-        });
-        return result.data.destinations;
-      }
-    } catch (error) {
-      console.error('Error al cargar destinos populares:', error);
-      // En caso de error, usar destinos por defecto
-      const defaultDestinations = [
-        'París, Francia',
-        'Tokio, Japón',
-        'Nueva York, Estados Unidos',
-        'Bali, Indonesia',
-        'Barcelona, España'
-      ];
-      startTransition(() => {
-        setPopularDestinations(defaultDestinations);
-      });
-      return defaultDestinations;
-    } finally {
-      setLoadingDestinations(false);
-    }
-    return [];
-  }, [popularDestinations.length]);
 
   // Memoizar función de búsqueda de destinos
   const searchDestinations = useCallback(async (query) => {
@@ -1870,63 +1879,6 @@ function App() {
     
     const IconComponent = iconMap[sectionName] || MapPin;
     return <IconComponent size={20} />;
-  };
-
-  // Función para navegar el carrusel
-  const navigateCarousel = (direction, resultId = null, currentContent = null) => {
-    // Si se proporciona resultId y currentContent, usar el contenido específico del mensaje
-    if (resultId && currentContent) {
-      const parsed = parseResponseSections(currentContent);
-      if (!parsed || !parsed.sections) return;
-      
-      const sectionKeys = Object.keys(parsed.sections);
-      if (sectionKeys.length === 0) return;
-      
-      setCarouselDirection(direction === 'next' ? 'right' : 'left');
-      
-      setCarouselIndices((prevIndices) => {
-        const currentIndex = prevIndices[resultId] || 0;
-        let newIndex;
-        if (direction === 'next') {
-          newIndex = (currentIndex + 1) % sectionKeys.length;
-        } else {
-          newIndex = (currentIndex - 1 + sectionKeys.length) % sectionKeys.length;
-        }
-        
-        // Hacer scroll al inicio cuando se cambia de página
-        setTimeout(() => {
-          const scrollRef = sectionScrollRefs.current[resultId];
-          if (scrollRef && scrollRef.current) {
-            scrollRef.current.scrollTop = 0;
-          }
-        }, 0);
-        
-        return {
-          ...prevIndices,
-          [resultId]: newIndex
-        };
-      });
-      return;
-    }
-    
-    // Código legacy para compatibilidad
-    if (!response) return;
-    
-    const parsed = parseResponseSections(response);
-    if (!parsed || !parsed.sections) return;
-
-    const sectionKeys = Object.keys(parsed.sections);
-    if (sectionKeys.length === 0) return;
-
-    setCarouselDirection(direction === 'next' ? 'right' : 'left');
-    
-    setCarouselIndex((prevIndex) => {
-      if (direction === 'next') {
-        return (prevIndex + 1) % sectionKeys.length;
-      } else {
-        return (prevIndex - 1 + sectionKeys.length) % sectionKeys.length;
-      }
-    });
   };
 
   // Función para alternar expansión de resultados

@@ -35,6 +35,11 @@ if [ -z "$GEMINI_API_KEY" ]; then
     exit 1
 fi
 
+# Aplicar workaround para importlib.metadata antes de iniciar uvicorn
+# Esto soluciona el error "module 'importlib.metadata' has no attribute 'packages_distributions'" en Python 3.9
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+python -c "import _fix_importlib" 2>/dev/null || true
+
 # Iniciar el servidor
 echo "🚀 Iniciando backend en http://localhost:8000"
 uvicorn main:app --reload --host 0.0.0.0 --port 8000

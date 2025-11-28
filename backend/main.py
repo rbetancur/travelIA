@@ -1,3 +1,6 @@
+# Aplicar workaround para Python 3.9 antes de importar otras dependencias
+import _fix_importlib  # noqa: F401
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse
