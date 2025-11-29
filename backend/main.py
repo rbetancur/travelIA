@@ -641,44 +641,27 @@ async def plan_travel(query: TravelQuery):
         conversation_context = conversation_history.get_conversation_context(session_id, limit=10)
         print(f"📚 [API] Contexto del historial: {len(conversation_context.split(chr(10))) if conversation_context else 0} líneas")
         
-        # Construcción ultra-optimizada: validar, limpiar y combinar directamente
-        # Elimina contexto dinámico verboso y se enfoca solo en información esencial
-        try:
-            if use_structured_format:
-                prompt = build_optimized_prompt(
-                    question=query.question,
-                    prompt_type="structured",
-                    destination=current_destination
-                )
-                print(f"📋 [API] Usando prompt estructurado optimizado (construcción simplificada)")
-            else:
-                # Para contextual, usar destino si está disponible
-                if not current_destination:
-                    last_destination = conversation_history.extract_last_destination(session_id)
-                    current_destination = last_destination
-                
-                prompt = build_optimized_prompt(
-                    question=query.question,
-                    prompt_type="contextual",
-                    destination=current_destination
-                )
-                print(f"💬 [API] Usando prompt contextualizado optimizado (construcción simplificada)")
-        except ValueError as e:
-            # Si falla la validación, usar método anterior como fallback
-            print(f"⚠️ [API] Validación falló, usando método anterior: {e}")
-            if use_structured_format:
-                base_prompt = load_prompt("travel_planning_optimized", question=query.question)
-                prompt = base_prompt
-            else:
-                if not current_destination:
-                    last_destination = conversation_history.extract_last_destination(session_id)
-                    current_destination = last_destination or "el destino actual"
-                base_prompt = load_prompt("travel_contextual_optimized", 
-                    question=query.question,
-                    current_destination=current_destination or "el destino actual",
-                    conversation_history=conversation_context or "No hay historial previo"
-                )
-                prompt = base_prompt
+        # Construcción optimizada usando templates desde archivos
+        # Valida, limpia y carga templates simplificados manteniendo optimizaciones
+        if use_structured_format:
+            prompt = build_optimized_prompt(
+                question=query.question,
+                prompt_type="structured",
+                destination=current_destination
+            )
+            print(f"📋 [API] Usando prompt estructurado optimizado desde template")
+        else:
+            # Para contextual, usar destino si está disponible
+            if not current_destination:
+                last_destination = conversation_history.extract_last_destination(session_id)
+                current_destination = last_destination
+            
+            prompt = build_optimized_prompt(
+                question=query.question,
+                prompt_type="contextual",
+                destination=current_destination
+            )
+            print(f"💬 [API] Usando prompt contextualizado optimizado desde template")
 
         # Inicializar el modelo de Gemini
         # IMPORTANTE: Solo usamos modelos GRATUITOS de Gemini (modelos Flash)

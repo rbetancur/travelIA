@@ -112,8 +112,8 @@ def get_prompt_path(prompt_name: str) -> Path:
 
 def build_optimized_prompt(question: str, prompt_type: str = "structured", destination: Optional[str] = None) -> str:
     """
-    Construye un prompt ultra-optimizado combinando directamente el system prompt
-    con la pregunta validada y limpia, eliminando contexto redundante.
+    Construye un prompt ultra-optimizado usando templates desde archivos.
+    Valida y limpia la pregunta antes de cargar el template.
     
     Args:
         question: Pregunta del usuario (será validada y limpiada)
@@ -134,26 +134,18 @@ def build_optimized_prompt(question: str, prompt_type: str = "structured", desti
     
     cleaned_question = sanitize_user_input(question, max_length=MAX_QUESTION_LENGTH)
     
-    # 2. Cargar system prompt reutilizable
-    system_prompt = load_system_prompt()
-    
-    # 3. Construir prompt mínimo según tipo
+    # 2. Cargar template desde archivo según tipo
     if prompt_type == "structured":
-        # Prompt estructurado: system + formato JSON + pregunta
-        prompt = f"""{system_prompt}
-
-Responde en JSON con 5 secciones: alojamiento, comida_local, lugares_imperdibles, consejos_locales, estimacion_costos.
-Cada sección: array de strings con recomendaciones detalladas (mínimo 3-5).
-
-Pregunta: {cleaned_question}"""
+        # Prompt estructurado: usar template travel_planning_optimized
+        prompt = load_prompt("travel_planning_optimized", question=cleaned_question)
     else:
-        # Prompt contextual: system + formato conversacional + pregunta
+        # Prompt contextual: usar template travel_contextual_optimized
+        # Manejar destination_text como variable opcional
         destination_text = f" sobre {destination}" if destination else ""
-        prompt = f"""{system_prompt}
-
-Responde de forma conversacional y directa (NO JSON), 2-4 párrafos{destination_text}.
-
-Pregunta: {cleaned_question}"""
+        prompt = load_prompt("travel_contextual_optimized", 
+            question=cleaned_question,
+            destination_text=destination_text
+        )
     
     return prompt
 
