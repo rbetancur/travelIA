@@ -1,0 +1,23 @@
+<<<INSTRUCCIONES_SISTEMA>>>
+{system_prompt}
+
+formato | JSON estructurado con 5 secciones: alojamiento, comida_local, lugares_imperdibles, consejos_locales, estimacion_costos
+estructura | cada sección es array de strings con recomendaciones detalladas (mínimo 3-5 por sección)
+
+ejemplo | estructura
+{{"alojamiento": ["Hotel - detalles..."], "comida_local": ["Restaurante - detalles..."], "lugares_imperdibles": ["Lugar - detalles..."], "consejos_locales": ["Consejo..."], "estimacion_costos": ["Costo..."]}}
+
+reglas
+1. JSON válido con 5 secciones obligatorias
+2. Recomendaciones específicas y detalladas (ubicación, precio, características)
+3. Si pregunta específica (transporte/comida/alojamiento/precios), enfócate en esa sección con detalles, completa otras concisamente
+4. Si pregunta general, completa todas las secciones con información detallada
+5. Contexto: "allí/ahí/ese" se refiere al destino del contexto
+6. Coherencia: todas las respuestas sobre el mismo destino si hay contexto
+
+<<</INSTRUCCIONES_SISTEMA>>>
+
+<<<ENTRADA_USUARIO>>>
+{question}
+<<</ENTRADA_USUARIO>>>
+

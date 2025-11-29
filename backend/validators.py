@@ -12,6 +12,10 @@ from security import (
 import re
 import uuid
 
+# Constantes de validación para optimización de tokens
+MAX_QUESTION_LENGTH = 500  # Máximo de caracteres permitidos en preguntas (reducido de 2000 para optimizar tokens)
+MIN_QUESTION_LENGTH = 10   # Mínimo de caracteres requeridos en preguntas (aumentado de 1 para evitar preguntas muy cortas)
+
 
 def validate_question(value: str) -> str:
     """
@@ -29,14 +33,14 @@ def validate_question(value: str) -> str:
     if not value or not isinstance(value, str):
         raise ValidationError("La pregunta no puede estar vacía")
     
-    # Validar longitud
+    # Validar longitud usando constantes de optimización
     try:
-        validate_input_length(value, "question", min_length=1, max_length=2000)
+        validate_input_length(value, "question", min_length=MIN_QUESTION_LENGTH, max_length=MAX_QUESTION_LENGTH)
     except Exception as e:
         raise ValidationError(str(e))
     
-    # Sanitizar entrada
-    sanitized = sanitize_user_input(value, max_length=2000)
+    # Sanitizar entrada usando constante de optimización
+    sanitized = sanitize_user_input(value, max_length=MAX_QUESTION_LENGTH)
     
     # Detectar prompt injection
     is_injection, reason = detect_prompt_injection(sanitized)

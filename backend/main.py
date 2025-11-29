@@ -642,8 +642,8 @@ async def plan_travel(query: TravelQuery):
         print(f"📚 [API] Contexto del historial: {len(conversation_context.split(chr(10))) if conversation_context else 0} líneas")
         
         if use_structured_format:
-            # Usar prompt estructurado (5 secciones) - código existente mejorado
-            base_prompt = load_prompt("travel_planning", question=query.question)
+            # Usar prompt estructurado optimizado (5 secciones)
+            base_prompt = load_prompt("travel_planning_optimized", question=query.question)
             
             # Añadir contexto del historial si existe (optimizado en formato TOON)
             if conversation_context:
@@ -704,7 +704,7 @@ async def plan_travel(query: TravelQuery):
                 last_destination = conversation_history.extract_last_destination(session_id)
                 current_destination = last_destination or "el destino actual"
             
-            base_prompt = load_prompt("travel_contextual", 
+            base_prompt = load_prompt("travel_contextual_optimized", 
                 question=query.question,
                 current_destination=current_destination or "el destino actual",
                 conversation_history=conversation_context or "No hay historial previo"

@@ -9,6 +9,30 @@ from security import sanitize_user_input, escape_for_format
 
 PROMPTS_DIR = Path(__file__).parent
 
+# Cache para el system prompt
+_system_prompt_cache: Optional[str] = None
+
+
+def load_system_prompt() -> str:
+    """
+    Carga el prompt de sistema reutilizable.
+    Usa cache para evitar leer el archivo múltiples veces.
+    
+    Returns:
+        Contenido del system prompt
+    """
+    global _system_prompt_cache
+    
+    if _system_prompt_cache is None:
+        system_prompt_path = PROMPTS_DIR / "system_prompt.txt"
+        if system_prompt_path.exists():
+            with open(system_prompt_path, 'r', encoding='utf-8') as f:
+                _system_prompt_cache = f.read().strip()
+        else:
+            _system_prompt_cache = ""
+    
+    return _system_prompt_cache
+
 
 def load_prompt(prompt_name: str, **kwargs) -> str:
     """
@@ -35,6 +59,11 @@ def load_prompt(prompt_name: str, **kwargs) -> str:
     with open(prompt_path, 'r', encoding='utf-8') as f:
         prompt_content = f.read().strip()
     
+    # Si el prompt contiene {system_prompt}, reemplazarlo con el system prompt reutilizable
+    if '{system_prompt}' in prompt_content:
+        system_prompt = load_system_prompt()
+        prompt_content = prompt_content.replace('{system_prompt}', system_prompt)
+    
     # Sanitizar y escapar variables antes de formatear
     if kwargs:
         sanitized_kwargs = {}
@@ -43,7 +72,9 @@ def load_prompt(prompt_name: str, **kwargs) -> str:
                 # Sanitizar entrada del usuario
                 # Usar límites apropiados según el tipo de variable
                 if key == 'question':
-                    max_length = 2000
+                    # Importar constante de validators para mantener consistencia
+                    from validators import MAX_QUESTION_LENGTH
+                    max_length = MAX_QUESTION_LENGTH
                 elif key == 'query':
                     max_length = 100
                 elif key == 'destination' or key == 'current_destination':
