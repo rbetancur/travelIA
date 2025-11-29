@@ -11,7 +11,7 @@ import google.generativeai as genai
 import os
 import unicodedata
 import re
-from prompts import load_prompt
+from prompts import load_prompt, build_optimized_prompt
 from weather import WeatherService, extract_destination_from_question, parse_form_destination
 from unsplash import UnsplashService
 from realtime_info import RealtimeInfoService
@@ -641,76 +641,44 @@ async def plan_travel(query: TravelQuery):
         conversation_context = conversation_history.get_conversation_context(session_id, limit=10)
         print(f"📚 [API] Contexto del historial: {len(conversation_context.split(chr(10))) if conversation_context else 0} líneas")
         
-        if use_structured_format:
-            # Usar prompt estructurado optimizado (5 secciones)
-            base_prompt = load_prompt("travel_planning_optimized", question=query.question)
-            
-            # Añadir contexto del historial si existe (optimizado en formato TOON)
-            if conversation_context:
-                # Analizar si la pregunta es específica sobre un tema
-                question_lower = query.question.lower()
-                is_specific_question = any(word in question_lower for word in [
-                    'transporte', 'comida', 'alojamiento', 'hotel', 'restaurante', 
-                    'precio', 'costo', 'lugar', 'atracción', 'consejo'
-                ])
-                uses_reference = any(word in question_lower for word in [
-                    'allí', 'ahí', 'ese', 'esa', 'este', 'esta', 'el', 'la', 'los', 'las'
-                ])
-                
-                # Construir contexto optimizado en formato TOON
-                context_parts = []
-                
-                if current_destination:
-                    context_parts.append(f"destino | {current_destination}")
-                
-                # Solo incluir historial relevante (últimas 3-4 interacciones para optimizar tokens)
-                recent_context = conversation_history.get_conversation_context(session_id, limit=6)
-                if recent_context:
-                    context_parts.append(f"historial | {recent_context}")
-                
-                # Instrucciones específicas según el tipo de pregunta
-                if uses_reference and current_destination:
-                    context_parts.append(f"referencia | pregunta usa 'allí/ahí/ese' → se refiere a {current_destination}")
-                
-                if is_specific_question:
-                    # Identificar el tema específico
-                    topic = None
-                    if any(word in question_lower for word in ['transporte', 'metro', 'autobús', 'taxi', 'movilidad']):
-                        topic = "transporte"
-                    elif any(word in question_lower for word in ['comida', 'restaurante', 'gastronomía', 'plato', 'comer']):
-                        topic = "comida"
-                    elif any(word in question_lower for word in ['alojamiento', 'hotel', 'hostal', 'dormir', 'hospedaje']):
-                        topic = "alojamiento"
-                    elif any(word in question_lower for word in ['precio', 'costo', 'gasto', 'presupuesto']):
-                        topic = "precios"
-                    
-                    if topic:
-                        context_parts.append(f"tema | pregunta específica sobre {topic} - enfócate en este tema con detalles")
-                    else:
-                        context_parts.append("enfoque | pregunta específica - enfócate en el tema pero completa todas las secciones")
-                else:
-                    context_parts.append("enfoque | pregunta general - proporciona información completa")
-                
-                context_section = "\n".join(context_parts)
-                prompt = context_section + "\n\n" + base_prompt
+        # Construcción ultra-optimizada: validar, limpiar y combinar directamente
+        # Elimina contexto dinámico verboso y se enfoca solo en información esencial
+        try:
+            if use_structured_format:
+                prompt = build_optimized_prompt(
+                    question=query.question,
+                    prompt_type="structured",
+                    destination=current_destination
+                )
+                print(f"📋 [API] Usando prompt estructurado optimizado (construcción simplificada)")
             else:
+                # Para contextual, usar destino si está disponible
+                if not current_destination:
+                    last_destination = conversation_history.extract_last_destination(session_id)
+                    current_destination = last_destination
+                
+                prompt = build_optimized_prompt(
+                    question=query.question,
+                    prompt_type="contextual",
+                    destination=current_destination
+                )
+                print(f"💬 [API] Usando prompt contextualizado optimizado (construcción simplificada)")
+        except ValueError as e:
+            # Si falla la validación, usar método anterior como fallback
+            print(f"⚠️ [API] Validación falló, usando método anterior: {e}")
+            if use_structured_format:
+                base_prompt = load_prompt("travel_planning_optimized", question=query.question)
                 prompt = base_prompt
-            
-            print(f"📋 [API] Usando prompt estructurado (formato JSON con 5 secciones)")
-        else:
-            # Usar prompt contextualizado (respuesta directa)
-            if not current_destination:
-                # Si no hay destino actual, intentar extraer del historial o usar genérico
-                last_destination = conversation_history.extract_last_destination(session_id)
-                current_destination = last_destination or "el destino actual"
-            
-            base_prompt = load_prompt("travel_contextual_optimized", 
-                question=query.question,
-                current_destination=current_destination or "el destino actual",
-                conversation_history=conversation_context or "No hay historial previo"
-            )
-            prompt = base_prompt
-            print(f"💬 [API] Usando prompt contextualizado (respuesta directa conversacional)")
+            else:
+                if not current_destination:
+                    last_destination = conversation_history.extract_last_destination(session_id)
+                    current_destination = last_destination or "el destino actual"
+                base_prompt = load_prompt("travel_contextual_optimized", 
+                    question=query.question,
+                    current_destination=current_destination or "el destino actual",
+                    conversation_history=conversation_context or "No hay historial previo"
+                )
+                prompt = base_prompt
 
         # Inicializar el modelo de Gemini
         # IMPORTANTE: Solo usamos modelos GRATUITOS de Gemini (modelos Flash)

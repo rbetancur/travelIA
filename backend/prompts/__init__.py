@@ -109,3 +109,51 @@ def get_prompt_path(prompt_name: str) -> Path:
     """
     return PROMPTS_DIR / f"{prompt_name}.txt"
 
+
+def build_optimized_prompt(question: str, prompt_type: str = "structured", destination: Optional[str] = None) -> str:
+    """
+    Construye un prompt ultra-optimizado combinando directamente el system prompt
+    con la pregunta validada y limpia, eliminando contexto redundante.
+    
+    Args:
+        question: Pregunta del usuario (será validada y limpiada)
+        prompt_type: Tipo de prompt ("structured" o "contextual")
+        destination: Destino opcional (solo si es crítico)
+        
+    Returns:
+        Prompt optimizado listo para usar
+    """
+    from validators import MAX_QUESTION_LENGTH, MIN_QUESTION_LENGTH
+    from security import sanitize_user_input, validate_input_length
+    
+    # 1. Validar y limpiar la pregunta
+    try:
+        validate_input_length(question, "question", min_length=MIN_QUESTION_LENGTH, max_length=MAX_QUESTION_LENGTH)
+    except Exception as e:
+        raise ValueError(f"Pregunta inválida: {str(e)}")
+    
+    cleaned_question = sanitize_user_input(question, max_length=MAX_QUESTION_LENGTH)
+    
+    # 2. Cargar system prompt reutilizable
+    system_prompt = load_system_prompt()
+    
+    # 3. Construir prompt mínimo según tipo
+    if prompt_type == "structured":
+        # Prompt estructurado: system + formato JSON + pregunta
+        prompt = f"""{system_prompt}
+
+Responde en JSON con 5 secciones: alojamiento, comida_local, lugares_imperdibles, consejos_locales, estimacion_costos.
+Cada sección: array de strings con recomendaciones detalladas (mínimo 3-5).
+
+Pregunta: {cleaned_question}"""
+    else:
+        # Prompt contextual: system + formato conversacional + pregunta
+        destination_text = f" sobre {destination}" if destination else ""
+        prompt = f"""{system_prompt}
+
+Responde de forma conversacional y directa (NO JSON), 2-4 párrafos{destination_text}.
+
+Pregunta: {cleaned_question}"""
+    
+    return prompt
+
