@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, field_validator, ValidationError
 from typing import Optional, List, Dict, Any
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 import os
 import unicodedata
 import re
@@ -19,6 +20,10 @@ from conversation_history import conversation_history
 from destination_detector import detect_destination_change, interpret_confirmation_response
 from pdf_generator import create_pdf
 from validators import validate_question, validate_destination, validate_search_query, validate_session_id
+from logger_config import setup_logger
+
+# Configurar logger
+logger = setup_logger('travelia')
 
 
 def parse_destinations_simple(response_text: str) -> list[str]:
@@ -142,6 +147,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     Maneja errores de validación de Pydantic y retorna respuestas seguras.
     No expone detalles internos que podrían ayudar a atacantes.
     """
+    # Obtener IP del cliente para logging de seguridad
+    client_ip = request.client.host if request.client else "unknown"
+    
     errors = exc.errors()
     error_messages = []
     
@@ -151,20 +159,26 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         
         # Detectar si es un intento de prompt injection
         if "contenido no permitido" in msg.lower() or "prompt injection" in msg.lower():
-            print(f"⚠️ [SECURITY] Intento de prompt injection detectado en campo '{field}'")
+            logger.warning(f"Validación fallida: intento de prompt injection en campo '{field}'. IP: {client_ip}")
             error_messages.append("La entrada contiene contenido no permitido")
         else:
             # Mensaje genérico para otros errores de validación
             if "longitud" in msg.lower() or "length" in msg.lower():
                 error_messages.append(f"El campo '{field}' tiene una longitud inválida")
-            elif "formato" in msg.lower() or "format" in msg.lower():
+            elif "formato" in msg.lower() or "format" in msg.lower() or "uuid" in msg.lower():
                 error_messages.append(f"El campo '{field}' tiene un formato inválido")
+            elif "no puede estar vacía" in msg.lower() or "cannot be empty" in msg.lower():
+                error_messages.append("Por favor, proporcione una pregunta válida.")
             else:
                 error_messages.append(f"Error en el campo '{field}'")
     
-    # Retornar mensaje genérico sin exponer detalles
+    # Log de validación fallida
+    if error_messages:
+        logger.warning(f"Validación fallida: {error_messages[0]}. IP: {client_ip}")
+    
+    # Retornar 422 (Unprocessable Entity) que es el estándar de FastAPI para errores de validación
     return JSONResponse(
-        status_code=400,
+        status_code=422,
         content={
             "detail": error_messages[0] if error_messages else "Error de validación en los datos enviados"
         }
@@ -397,17 +411,29 @@ async def generate_itinerary_pdf(
 
 
 @app.post("/api/travel", response_model=TravelResponse)
-async def plan_travel(query: TravelQuery):
+async def plan_travel(query: TravelQuery, request: Request):
     """
     Endpoint para procesar preguntas sobre viajes usando Google Gemini
     Mantiene historial de conversación para contexto
     """
+    # Obtener IP del cliente para logging de seguridad
+    client_ip = request.client.host if request.client else "unknown"
+    
     try:
+        # Validación mejorada de entrada
+        if not query.question or not query.question.strip():
+            logger.warning(f"Validación fallida: pregunta vacía o solo espacios. IP: {client_ip}")
+            raise HTTPException(
+                status_code=400,
+                detail="Por favor, proporcione una pregunta válida."
+            )
+        
         print(f"\n{'='*80}")
         print(f"🚀 [API] Nueva petición recibida")
         print(f"📝 [API] Pregunta: {query.question[:100]}...")
         print(f"📍 [API] Destino (formulario): {query.destination}")
         print(f"🔑 [API] Session ID recibido: {query.session_id}")
+        logger.info(f"Nueva petición recibida. IP: {client_ip}, Session ID: {query.session_id}")
         
         # ============================================================
         # PASO 1: Determinar tipo de petición
@@ -705,7 +731,51 @@ async def plan_travel(query: TravelQuery):
         print(f"⚠️ [API] IMPORTANTE: Consultando DIRECTAMENTE a Gemini (NO hay caché de respuestas)")
         
         # Generar la respuesta - SIEMPRE se consulta a Gemini, nunca se usa caché
-        response = model.generate_content(prompt)
+        try:
+            response = model.generate_content(prompt)
+        except google_exceptions.PermissionDenied as e:
+            logger.critical(f"Error de autenticación (401) - API key inválida o acceso denegado. IP: {client_ip}, Error: {str(e)}")
+            raise HTTPException(
+                status_code=401,
+                detail="Error de autenticación. Contacte al administrador."
+            )
+        except google_exceptions.Unauthenticated as e:
+            logger.critical(f"Error de autenticación (401) - No autenticado. IP: {client_ip}, Error: {str(e)}")
+            raise HTTPException(
+                status_code=401,
+                detail="Error de autenticación. Contacte al administrador."
+            )
+        except google_exceptions.ResourceExhausted as e:
+            logger.warning(f"Límite de tasa excedido (429) - Cuota o límite de solicitudes alcanzado. IP: {client_ip}, Error: {str(e)}")
+            raise HTTPException(
+                status_code=429,
+                detail="Límite de solicitudes excedido. Intente de nuevo más tarde."
+            )
+        except google_exceptions.InvalidArgument as e:
+            error_msg = str(e).lower()
+            if 'safety' in error_msg or 'blocked' in error_msg or 'content' in error_msg:
+                logger.warning(f"Contenido bloqueado por seguridad (400) - Pregunta viola políticas. IP: {client_ip}, Error: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Su pregunta contiene contenido que no podemos procesar. Por favor, reformule."
+                )
+            else:
+                logger.error(f"Error de argumento inválido (400). IP: {client_ip}, Error: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Error en los parámetros de la solicitud. Por favor, verifique su entrada."
+                )
+        except Exception as gemini_error:
+            # Verificar si es un error de contenido bloqueado de Gemini
+            error_str = str(gemini_error).lower()
+            if 'blocked' in error_str or 'safety' in error_str or 'content policy' in error_str:
+                logger.warning(f"Contenido bloqueado por seguridad (400) - Pregunta viola políticas. IP: {client_ip}, Error: {str(gemini_error)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Su pregunta contiene contenido que no podemos procesar. Por favor, reformule."
+                )
+            # Si no es un error conocido, re-lanzar para que se maneje en el bloque general
+            raise
         
         print(f"✅ [API] Respuesta recibida de Gemini (consulta directa, no desde caché)")
         
@@ -806,19 +876,64 @@ async def plan_travel(query: TravelQuery):
     except HTTPException:
         # Re-lanzar excepciones HTTP directamente
         raise
+    except google_exceptions.PermissionDenied as e:
+        logger.critical(f"Error de autenticación (401) - API key inválida o acceso denegado. IP: {client_ip}, Error: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail="Error de autenticación. Contacte al administrador."
+        )
+    except google_exceptions.Unauthenticated as e:
+        logger.critical(f"Error de autenticación (401) - No autenticado. IP: {client_ip}, Error: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail="Error de autenticación. Contacte al administrador."
+        )
+    except google_exceptions.ResourceExhausted as e:
+        logger.warning(f"Límite de tasa excedido (429) - Cuota o límite de solicitudes alcanzado. IP: {client_ip}, Error: {str(e)}")
+        raise HTTPException(
+            status_code=429,
+            detail="Límite de solicitudes excedido. Intente de nuevo más tarde."
+        )
+    except google_exceptions.InvalidArgument as e:
+        error_msg = str(e).lower()
+        if 'safety' in error_msg or 'blocked' in error_msg or 'content' in error_msg:
+            logger.warning(f"Contenido bloqueado por seguridad (400) - Pregunta viola políticas. IP: {client_ip}, Error: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail="Su pregunta contiene contenido que no podemos procesar. Por favor, reformule."
+            )
+        else:
+            logger.error(f"Error de argumento inválido (400). IP: {client_ip}, Error: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail="Error en los parámetros de la solicitud. Por favor, verifique su entrada."
+            )
     except Exception as e:
-        # Manejo de errores más detallado
+        # Manejo de errores de API (500) y otros errores inesperados
         error_type = type(e).__name__
         error_message = str(e) if str(e) else "Error desconocido"
-        full_error = f"Error al procesar la solicitud ({error_type}): {error_message}"
-        print(f"Error completo: {full_error}")
+        
+        # Verificar si es un error de contenido bloqueado
+        error_str = error_message.lower()
+        if 'blocked' in error_str or 'safety' in error_str or 'content policy' in error_str:
+            logger.warning(f"Contenido bloqueado por seguridad (400) - Pregunta viola políticas. IP: {client_ip}, Error: {error_message}")
+            raise HTTPException(
+                status_code=400,
+                detail="Su pregunta contiene contenido que no podemos procesar. Por favor, reformule."
+            )
+        
+        # Error de API interno o inesperado
+        logger.error(f"Error al procesar solicitud (500) - Error inesperado. IP: {client_ip}, Tipo: {error_type}, Error: {error_message}")
         import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=full_error)
+        logger.error(f"Traceback completo: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error al procesar su solicitud. Por favor, inténtelo de nuevo. Si el problema persiste, contacte al soporte."
+        )
 
 
 @app.post("/api/travel/confirm-destination")
-async def confirm_destination_change(confirmation: DestinationConfirmation):
+async def confirm_destination_change(confirmation: DestinationConfirmation, request: Request):
     """
     Endpoint para confirmar o rechazar un cambio de destino
     """
@@ -844,7 +959,7 @@ async def confirm_destination_change(confirmation: DestinationConfirmation):
                     session_id=confirmation.session_id
                 )
                 # Procesar la pregunta con el nuevo destino
-                return await plan_travel(travel_query)
+                return await plan_travel(travel_query, request)
             else:
                 return {
                     "status": "confirmed",
