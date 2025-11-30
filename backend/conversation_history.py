@@ -292,6 +292,57 @@ class ConversationHistory:
             print(f"🧹 [HISTORY] Confirmación pendiente limpiada para sesión {session_id}")
 
 
-# Instancia global del historial de conversaciones
+class GlobalHistory:
+    """Gestiona el historial global de conversaciones (últimas 10)"""
+    
+    def __init__(self, max_conversations: int = 10):
+        """
+        Args:
+            max_conversations: Número máximo de conversaciones a mantener (FIFO)
+        """
+        self.conversations: List[Dict] = []
+        self.max_conversations = max_conversations
+    
+    def add_conversation(self, pregunta: str, respuesta: str) -> None:
+        """
+        Añade una conversación al historial global
+        
+        Args:
+            pregunta: Pregunta del usuario
+            respuesta: Respuesta del asistente
+        """
+        conversation = {
+            'pregunta': pregunta,
+            'respuesta': respuesta,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        self.conversations.append(conversation)
+        
+        # Mantener solo las últimas max_conversations (FIFO)
+        if len(self.conversations) > self.max_conversations:
+            self.conversations = self.conversations[-self.max_conversations:]
+        
+        print(f"📝 [GLOBAL_HISTORY] Conversación añadida al historial global ({len(self.conversations)}/{self.max_conversations})")
+    
+    def get_history(self) -> List[Dict]:
+        """
+        Obtiene el historial completo de conversaciones
+        
+        Returns:
+            Lista de conversaciones en formato diccionario
+        """
+        return self.conversations.copy()
+    
+    def clear(self) -> None:
+        """Limpia el historial global"""
+        self.conversations = []
+        print(f"🧹 [GLOBAL_HISTORY] Historial global limpiado")
+
+
+# Instancia global del historial de conversaciones por sesión
 conversation_history = ConversationHistory(max_messages=20)
+
+# Instancia global del historial global de conversaciones
+global_history = GlobalHistory(max_conversations=10)
 

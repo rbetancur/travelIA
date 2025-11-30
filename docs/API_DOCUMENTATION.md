@@ -11,6 +11,7 @@ Documentación completa de todos los endpoints de la API REST de ViajeIA.
   - [GET /api/health](#get-apihealth)
 - [Endpoints de Destinos](#endpoints-de-destinos)
 - [Endpoints de Conversación](#endpoints-de-conversación)
+  - [GET /api/historial](#get-apihistorial)
 - [Endpoints de Utilidades](#endpoints-de-utilidades)
 - [Códigos de Error](#códigos-de-error)
 - [Reglas de Validación](#reglas-de-validación)
@@ -513,6 +514,104 @@ POST /api/conversation/clear
 #### Códigos de Error
 
 - **404**: Sesión no encontrada
+
+---
+
+### GET /api/historial
+
+Obtiene el historial global de las últimas 10 conversaciones procesadas en el sistema.
+
+#### Descripción
+
+Este endpoint devuelve las últimas 10 conversaciones completas (pregunta + respuesta) que han sido procesadas por el sistema, independientemente de la sesión. Cada conversación incluye la pregunta del usuario, la respuesta del asistente y una marca de tiempo en formato ISO 8601.
+
+#### URL
+
+```
+GET /api/historial
+```
+
+#### Headers
+
+No se requieren headers especiales.
+
+#### Parámetros
+
+Este endpoint no requiere parámetros.
+
+#### Respuesta Exitosa
+
+**200 OK**
+
+```json
+{
+  "conversaciones": [
+    {
+      "pregunta": "¿Qué lugares debo visitar en París durante 3 días?",
+      "respuesta": "Para 3 días en París, te recomiendo...",
+      "timestamp": "2024-01-15T14:30:00.123456"
+    },
+    {
+      "pregunta": "¿Cuál es el mejor hotel en Barcelona?",
+      "respuesta": "En Barcelona hay varias opciones excelentes...",
+      "timestamp": "2024-01-15T14:25:00.654321"
+    }
+  ],
+  "total": 10
+}
+```
+
+##### Campos de Respuesta
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `conversaciones` | array | Lista de conversaciones (máximo 10, ordenadas de más reciente a más antigua) |
+| `conversaciones[].pregunta` | string | Pregunta del usuario |
+| `conversaciones[].respuesta` | string | Respuesta del asistente |
+| `conversaciones[].timestamp` | string | Marca de tiempo en formato ISO 8601 |
+| `total` | integer | Número total de conversaciones en el historial (máximo 10) |
+
+#### Códigos de Error
+
+- **500**: Error al obtener el historial
+
+#### Notas Importantes
+
+1. **Almacenamiento en Memoria**: El historial se almacena en memoria del servidor. Se perderá al reiniciar el servidor.
+
+2. **Límite FIFO**: El historial mantiene un máximo de 10 conversaciones. Cuando se alcanza el límite, las conversaciones más antiguas se eliminan automáticamente (FIFO - First In, First Out).
+
+3. **Guardado Automático**: Las conversaciones se guardan automáticamente después de cada pregunta procesada exitosamente en el endpoint POST /api/travel.
+
+4. **Formato de Timestamp**: Los timestamps están en formato ISO 8601 (ej: "2024-01-15T14:30:00.123456").
+
+5. **Futuras Versiones**: En versiones futuras, el historial se migrará a una base de datos para persistencia permanente.
+
+#### Ejemplo de Uso
+
+```bash
+curl -X GET http://localhost:8000/api/historial
+```
+
+#### Respuesta de Ejemplo
+
+```json
+{
+  "conversaciones": [
+    {
+      "pregunta": "¿Qué lugares debo visitar en París durante 3 días?",
+      "respuesta": "Para 3 días en París, te recomiendo visitar:\n\n1. Torre Eiffel\n2. Museo del Louvre\n3. Catedral de Notre-Dame\n...",
+      "timestamp": "2024-01-15T14:30:00.123456"
+    },
+    {
+      "pregunta": "¿Cuál es el mejor hotel en Barcelona?",
+      "respuesta": "En Barcelona hay varias opciones excelentes de hoteles según tu presupuesto...",
+      "timestamp": "2024-01-15T14:25:00.654321"
+    }
+  ],
+  "total": 2
+}
+```
 
 ---
 

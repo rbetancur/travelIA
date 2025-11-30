@@ -1,0 +1,15 @@
+# FEATURE HISTORIAL
+
+# Objetivo
+Permitir a los usuarios ver su historial de conversaciones.
+
+# Requisitos del backend
+Un nuevo endpoint GET /api/historial que devuelva las últimas 10 conversaciones en formato JSON con
+pregunta, respuesta y marca de tiempo ISO 8601 para cada una. 
+
+# Requisitos del frontend
+Una nueva sección "Historial" debajo del formulario, un botón "Ver Historial" y la visualización de la lista de conversaciones anteriores. 
+
+# Enfoque de implementación
+Almacenamiento de la lista en memoria (backend), guardado automático después de cada pregunta, máximo 10 elementos con eliminación
+FIFO. Tenga en cuenta que las versiones futuras utilizarán una base de datos.

@@ -1764,6 +1764,329 @@ html, body {
   background: #94a3b8;
 }
 
+/* Sección de Historial Global */
+.history-section {
+  margin-top: 2.5rem;
+  margin-bottom: 1.5rem;
+  padding: 0 1.25rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+}
+
+.history-button {
+  background: linear-gradient(135deg, #1a1f3a 0%, #0f1419 100%) !important;
+  border: 2px solid rgba(212, 175, 55, 0.4) !important;
+  color: #D4AF37 !important;
+  padding: 14px 24px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 1rem;
+  font-weight: 600;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(212, 175, 55, 0.2) !important;
+}
+
+.history-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.3), transparent);
+  transition: left 0.5s ease;
+}
+
+.history-button:hover::before {
+  left: 100%;
+}
+
+.history-button:hover {
+  background: linear-gradient(135deg, #0f1419 0%, #1a1f3a 100%) !important;
+  border-color: rgba(212, 175, 55, 0.6) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(212, 175, 55, 0.4) !important;
+  color: #f5d98f !important;
+}
+
+.history-button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(212, 175, 55, 0.3);
+}
+
+.history-button:focus {
+  outline: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(212, 175, 55, 0.3);
+}
+
+.history-button svg {
+  transition: transform 0.3s ease;
+  color: #D4AF37;
+}
+
+.history-button:hover svg {
+  transform: scale(1.1);
+  color: #f5d98f;
+}
+
+.history-list-container {
+  margin-top: 1.5rem;
+  background: linear-gradient(135deg, #1a1f3a 0%, #0f1419 100%);
+  border: 2px solid rgba(212, 175, 55, 0.4);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-height: 600px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(212, 175, 55, 0.2);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.history-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.history-list-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.history-list-container::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.4);
+  border-radius: 4px;
+}
+
+.history-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.6);
+}
+
+.history-loading {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: #D4AF37 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.history-loading p {
+  color: #D4AF37 !important;
+}
+
+.history-loading::after {
+  content: '';
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(212, 175, 55, 0.2);
+  border-top-color: #D4AF37;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.history-item {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 14px;
+  padding: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.history-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.6), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(212, 175, 55, 0.5);
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.3), 0 0 0 1px rgba(212, 175, 55, 0.3);
+  transform: translateY(-2px);
+}
+
+.history-item:hover::before {
+  opacity: 1;
+}
+
+.history-item-header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+}
+
+.history-item-timestamp {
+  font-size: 0.875rem;
+  color: #D4AF37;
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.history-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.history-item-question,
+.history-item-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.history-item-label {
+  display: flex;
+  align-items: center;
+  font-size: 0.875rem;
+  color: #D4AF37;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.history-item-text {
+  color: #e2e8f0 !important;
+  line-height: 1.7;
+  font-size: 0.95rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.4) !important;
+  border-radius: 10px;
+  border-left: 4px solid rgba(212, 175, 55, 0.5);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.history-item:hover .history-item-text {
+  background: rgba(0, 0, 0, 0.5) !important;
+  border-left-color: rgba(212, 175, 55, 0.7);
+}
+
+.history-item-question .history-item-text {
+  border-left-color: rgba(59, 130, 246, 0.7);
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #e2e8f0 !important;
+}
+
+.history-item-question:hover .history-item-text {
+  border-left-color: rgba(59, 130, 246, 0.9);
+  background: rgba(59, 130, 246, 0.2) !important;
+}
+
+.history-item-answer .history-item-text {
+  border-left-color: rgba(212, 175, 55, 0.7);
+  color: #e2e8f0 !important;
+}
+
+.history-item-answer:hover .history-item-text {
+  border-left-color: rgba(212, 175, 55, 0.9);
+}
+
+.history-empty {
+  text-align: center;
+  padding: 4rem 1.5rem;
+  color: #D4AF37 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.history-empty svg {
+  margin-bottom: 0.5rem;
+  opacity: 0.7;
+  color: #D4AF37 !important;
+  transition: all 0.3s ease;
+}
+
+.history-empty:hover svg {
+  opacity: 1;
+  transform: scale(1.1);
+  color: #f5d98f !important;
+}
+
+.history-empty p {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #e2e8f0 !important;
+  font-weight: 500;
+}
+
+.history-empty-subtitle {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  color: #cbd5e1 !important;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* Responsive para la sección de historial */
+@media (max-width: 768px) {
+  .history-section {
+    padding: 0 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .history-list-container {
+    padding: 1rem;
+    max-height: 400px;
+  }
+
+  .history-item {
+    padding: 1rem;
+  }
+
+  .history-item-text {
+    font-size: 0.875rem;
+    padding: 0.5rem;
+  }
+}
+
 /* Form Footer - Fixed button container */
 .form-footer {
   display: flex;
@@ -5391,25 +5714,8 @@ html, body {
   min-width: 200px;
 }
 
-/* Estilos legacy para history-button (ya no se usa, pero mantenemos por compatibilidad) */
-.history-button {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 10px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.history-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.4);
-}
+/* Estilos legacy para history-button - ELIMINADOS porque estaban causando conflicto */
+/* Los estilos correctos están definidos arriba en la línea 1778 */
 
 .history-badge {
   background: #ef4444;

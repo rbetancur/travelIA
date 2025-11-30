@@ -16,7 +16,7 @@ from prompts import load_prompt, build_optimized_prompt
 from weather import WeatherService, extract_destination_from_question, parse_form_destination
 from unsplash import UnsplashService
 from realtime_info import RealtimeInfoService
-from conversation_history import conversation_history
+from conversation_history import conversation_history, global_history
 from destination_detector import detect_destination_change, interpret_confirmation_response
 from pdf_generator import create_pdf
 from validators import validate_question, validate_destination, validate_search_query, validate_session_id
@@ -858,6 +858,9 @@ async def plan_travel(query: TravelQuery, request: Request):
         conversation_history.add_message(session_id, 'assistant', response_text)
         print(f"💬 [API] Respuesta añadida al historial")
         
+        # Guardar conversación en el historial global
+        global_history.add_conversation(query.question, response_text)
+        
         print(f"✅ [API] Respuesta final preparada")
         print(f"📊 [API] Resumen: respuesta={len(response_text)} chars, formato={'estructurado' if use_structured_format else 'contextual'}, clima={'sí' if weather_message else 'no'}, fotos={len(photos) if photos else 0}")
         print(f"{'='*80}\n")
@@ -1414,4 +1417,24 @@ async def clear_conversation_history(request: ConversationHistoryRequest):
         "session_id": session_id,
         "message": "Historial limpiado exitosamente"
     }
+
+
+@app.get("/api/historial")
+async def get_historial():
+    """
+    Endpoint para obtener el historial de las últimas 10 conversaciones.
+    Devuelve pregunta, respuesta y marca de tiempo ISO 8601 para cada conversación.
+    """
+    try:
+        historial = global_history.get_history()
+        return {
+            "conversaciones": historial,
+            "total": len(historial)
+        }
+    except Exception as e:
+        logger.error(f"Error al obtener historial: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener el historial: {str(e)}"
+        )
 

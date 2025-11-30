@@ -90,6 +90,9 @@ function App() {
   const [sessionId, setSessionId] = useState(null);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [globalHistory, setGlobalHistory] = useState([]);
+  const [showGlobalHistory, setShowGlobalHistory] = useState(false);
+  const [loadingGlobalHistory, setLoadingGlobalHistory] = useState(false);
   const [favorites, setFavorites] = useState([]);
   const [showFavorites, setShowFavorites] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -1085,6 +1088,22 @@ function App() {
       setRealtimeInfo(null);
     } finally {
       setLoadingRealtimeInfo(false);
+    }
+  }, []);
+
+  // Función para cargar el historial global
+  const loadGlobalHistory = useCallback(async () => {
+    try {
+      setLoadingGlobalHistory(true);
+      const response = await axios.get(`${API_URL}/api/historial`);
+      if (response.data && response.data.conversaciones) {
+        setGlobalHistory(response.data.conversaciones);
+      }
+    } catch (error) {
+      console.error('Error al cargar historial global:', error);
+      setGlobalHistory([]);
+    } finally {
+      setLoadingGlobalHistory(false);
     }
   }, []);
 
@@ -2865,6 +2884,73 @@ function App() {
 
               
             </form>
+
+            {/* Sección de Historial */}
+            <div className="history-section">
+              <button
+                type="button"
+                className="history-button"
+                onClick={async () => {
+                  if (!showGlobalHistory) {
+                    await loadGlobalHistory();
+                  }
+                  setShowGlobalHistory(!showGlobalHistory);
+                }}
+              >
+                <History size={18} style={{ marginRight: '8px' }} />
+                {showGlobalHistory ? 'Ocultar Historial' : 'Ver Historial'}
+              </button>
+
+              {showGlobalHistory && (
+                <div className="history-list-container">
+                  {loadingGlobalHistory ? (
+                    <div className="history-loading">
+                      <p>Cargando historial...</p>
+                    </div>
+                  ) : globalHistory.length === 0 ? (
+                    <div className="history-empty">
+                      <MessageSquare size={32} />
+                      <p>No hay conversaciones anteriores</p>
+                      <p className="history-empty-subtitle">Las conversaciones aparecerán aquí después de hacer preguntas</p>
+                    </div>
+                  ) : (
+                    <div className="history-list">
+                      {globalHistory.map((conversacion, index) => (
+                        <div key={index} className="history-item">
+                          <div className="history-item-header">
+                            <span className="history-item-timestamp">
+                              {new Date(conversacion.timestamp).toLocaleString('es-ES', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          <div className="history-item-content">
+                            <div className="history-item-question">
+                              <div className="history-item-label">
+                                <User size={16} style={{ marginRight: '6px' }} />
+                                <strong>Pregunta:</strong>
+                              </div>
+                              <div className="history-item-text">{conversacion.pregunta}</div>
+                            </div>
+                            <div className="history-item-answer">
+                              <div className="history-item-label">
+                                <MessageSquare size={16} style={{ marginRight: '6px' }} />
+                                <strong>Respuesta:</strong>
+                              </div>
+                              <div className="history-item-text">{conversacion.respuesta}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </main>
           <div className={`form-footer ${showDateModal || showTravelersModal || showBudgetModal || showPreferenceModal ? 'hidden' : ''}`}>
                 <button 
