@@ -723,11 +723,20 @@ async def plan_travel(query: TravelQuery, request: Request):
                        "Los modelos Pro (gemini-2.5-pro, gemini-2.0-pro) son de pago y NO están permitidos."
             )
         
-        model = genai.GenerativeModel(GEMINI_MODEL)
+        # Cargar el system prompt para usar como system_instruction
+        from prompts import load_system_prompt
+        system_instruction = load_system_prompt()
+        
+        # Crear el modelo con system_instruction para reforzar la personalidad
+        model = genai.GenerativeModel(
+            GEMINI_MODEL,
+            system_instruction=system_instruction
+        )
         
         print(f"🤖 [API] Enviando prompt a Gemini (modelo: {GEMINI_MODEL})")
         print(f"📏 [API] Longitud del prompt: {len(prompt)} caracteres")
         print(f"📋 [API] Primeros 300 caracteres del prompt:\n{prompt[:300]}...")
+        print(f"👤 [API] System instruction aplicada: {system_instruction[:100]}...")
         print(f"⚠️ [API] IMPORTANTE: Consultando DIRECTAMENTE a Gemini (NO hay caché de respuestas)")
         
         # Generar la respuesta - SIEMPRE se consulta a Gemini, nunca se usa caché
